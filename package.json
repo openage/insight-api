@@ -1,0 +1,37 @@
+{
+    "name": "insight-api",
+    "version": "1.0.0",
+    "description": "Reports and Analytics Backend",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/openage/insight-api.git"
+    },
+    "keywords": [
+        "api",
+        "reports",
+    ],
+    "author": "Sunny Parkash <sunny.parkash@email.com> (https://github.com/sunnyparkash)",
+    "license": "MIT",
+    "dependencies": {
+        "@open-age/express-api": "^1.0.3",
+        "@open-age/logger": "^1.0.2",
+        "@open-age/offline-processor": "^1.1.1",
+        "app-root-path": "^2.0.1",
+        "bcrypt-nodejs": "0.0.3",
+        "bluebird": "^3.5.1",
+        "body-parser": "^1.18.2",
+        "camel-case": "^3.0.0",
+        "config": "^1.28.1",
+        "cors": "^2.8.4",
+        "express": "^4.16.2",
+        "json2csv": "^3.11.5",
+        "jsonwebtoken": "^6.2.0",
+        "moment": "^2.20.1",
+        "mysql2": "^1.5.1",
+        "param-case": "^2.1.1",
+        "path": "^0.12.7",
+        "pug": "^2.0.0-rc.4",
+        "sequelize": "^4.28.6",
+        "title-case": "^2.1.1"
+    }
+}
