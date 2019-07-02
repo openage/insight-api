@@ -6,7 +6,7 @@ const definitions = require('../definitions')
 const paths = {}
 
 const setHeaders = (param) => {
-    if (!param.name.startsWith('x-')) {
+    if (!param.name || !param.name.startsWith('x-')) {
         return param
     }
 

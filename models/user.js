@@ -1,21 +1,55 @@
-"use strict";
-var bcrypt = require('bcrypt-nodejs');
+'use strict'
+var mongoose = require('mongoose')
 
-module.exports = function (sequelize, DataTypes) {
-  return sequelize.define('user', {
-    id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true
+module.exports = {
+    code: String,
+    profile: {
+        name: String,
+        phone: String,
+        email: String,
+        dob: Date,
+        gender: String
     },
-    firstname: DataTypes.STRING,
-    lastname: DataTypes.STRING,
-    emailId: DataTypes.STRING,
-    mobile: DataTypes.INTEGER,
-    password: DataTypes.STRING,
-    role: DataTypes.STRING,
-    permission: DataTypes.STRING,
-    token: DataTypes.STRING,
-    createdAt: DataTypes.DATE
-  });
-};  
+    status: String,
+    pic: {
+        url: {
+            type: String,
+            default: null
+        }
+    },
+    role: {
+        id: { type: String },
+        key: { type: String },
+        permissions: [{ type: String }]
+    },
+
+    config: Object,
+
+    employee: {
+        designation: {
+            type: String,
+            default: ''
+        },
+        department: {
+            type: String,
+            default: ''
+        },
+        division: {
+            type: String,
+            default: ''
+        }
+    },
+
+    organization: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'organization'
+    },
+
+    recentLogin: {
+        type: Date,
+        default: Date.now
+    },
+
+    created_At: { type: Date, default: Date.now }
+
+}

@@ -1,101 +1,66 @@
-'use strict';
+'use strict'
+const auth = require('../helpers/auth')
+const apiRoutes = require('@open-age/express-api')
+const fs = require('fs')
+const appRoot = require('app-root-path')
+const specs = require('../specs')
+const fsConfig = require('config').get('folders')
 
-const fs = require('fs');
-const apiRoutes = require('@open-age/express-api');
-const auth = require('../helpers/auth');
-
-const loggerConfig = require('config').get('logger');
-var appRoot = require('app-root-path');
-const fsConfig = require('config').get('folders');
-
-const master = require('../api/master');
-
-module.exports.configure = (app) => {
-
+module.exports.configure = (app, logger) => {
+    logger.start('settings:routes:configure')
     app.get('/', (req, res) => {
         res.render('index', {
-            title: 'Insight',
-            message: 'This is Reports and Analytics Api'
-        });
-    });
+            title: 'Reports Api',
+            message: 'This is Reports Api'
+        })
+    })
+    app.get('/specs', function (req, res) {
+        fs.readFile('./public/specs.html', function (err, data) {
+            res.contentType('text/html')
+            res.send(data)
+        })
+    })
+    app.get('/api/specs', function (req, res) {
+        res.contentType('application/json')
+        res.send(specs.get())
+    })
 
-    app.get('/api/logs', function (req, res) {
-        var filePath = appRoot + '/' + loggerConfig.file.filename;
-        res.download(filePath);
-    });
+    app.get('/api/versions/current', function (req, res) {
+        var filePath = appRoot + '/version.json'
 
-    app.get('/api/reports/:file', function (req, res) {
-        var fileName = req.params.file;
-        let filePath = fsConfig.temp ? `${fsConfig.temp}/${fileName}` : `${appRoot}/temp/${fileName}`;
-        res.download(filePath);
-    });
+        fs.readFile(filePath, function (err, data) {
+            res.contentType('application/json')
+            res.send(data)
+        })
+    })
 
-    app.get('/api/merchants', master.getMerchant);
-    app.get('/api/gateways', master.getPaymentGateways);
-    app.get('/api/banks', master.getBanks);
-    app.get('/api/cards', master.getCards);
-    app.get('/api/status', master.getStatus);
-    app.get('/api/paymentModes', master.getPaymentModes);
-    app.get('/api/nbOptions', master.getNbOptions);
-    app.get('/api/types', master.getTypes);
-    app.get('/api/settlementStatus', master.getSettlementStatus);
+    app.get('/reports/:file', function (req, res) {
+        var fileName = req.params.file
+        let filePath = fsConfig.temp ? `${fsConfig.temp}/${fileName}` : `${appRoot}/temp/${fileName}`
+        res.download(filePath)
+    })
+    var api = apiRoutes(app)
+    api.model('logs')
+        .register('REST', [auth.requireRoleKey])
 
-
-    let api = apiRoutes(app);
-
-    // api.model('reportRequests').register('REST', auth.requiresToken);
-    api.model('reportRequests')
+    api.model('reports')
+        .register('REST', [auth.requireRoleKey])
         .register([{
-            action: 'POST',
-            method: 'create',
-            filter: auth.requiresToken
-        }, {
             action: 'GET',
-            method: 'recents',
-            url: '/recents'
-        }, {
-            action: 'get',
-            method: 'get',
-            url: '/:id',
-            filter: auth.requiresToken
-        }, {
-            action: 'GET',
-            method: 'search',
-            filter: auth.requiresToken
-        }]);
-    api.model('users')
-        .register([{
-                action: 'POST',
-                method: 'create'
-            }, {
-                action: 'GET',
-                method: 'search'
-            },
-            {
-                action: 'PUT',
-                method: 'update',
-                url: '/:id'
-            }, {
-                action: 'POST',
-                method: 'login',
-                url: '/login'
-            }
-        ])
-    api.model('favorites')
-        .register([{
-            action: 'POST',
-            method: 'create',
-            filter: auth.requiresToken
-        }, {
-            action: 'GET',
-            method: 'search'
-        }, {
-            action: 'GET',
-            method: 'get',
-            url: '/:id'
-        }, {
-            action: 'DELETE',
-            method: 'delete',
-            url: '/:id'
+            method: 'data',
+            url: '/:id/data',
+            filter: [auth.requireRoleKey]
         }])
-};
+
+    api.model('reportTypes')
+        .register('REST', [auth.requireRoleKey])
+        .register([{
+            action: 'GET',
+            method: 'data',
+            url: '/:id/data',
+            filter: [auth.requireRoleKey]
+        }])
+    api.model('reportAreas').register('REST', [auth.requireRoleKey])
+    api.model('providers').register('REST', [auth.requireRoleKey])
+    logger.end()
+}

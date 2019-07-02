@@ -1,34 +1,33 @@
-"use strict";
+'use strict'
 
 exports.updateFields = (data) => {
     var index,
         field,
-        newValue;
+        newValue
 
     var retVal = {
-        changes : [],
+        changes: [],
         changedFields: [],
-        updateData:{}
-    };
+        updateData: {}
+    }
 
     for (index in data.fields) {
-        field = data.fields[index];
+        field = data.fields[index]
 
-        newValue = data.newValues[field];
+        newValue = data.newValues[field]
         if (data.modelObj[field] !== newValue) {
-
             var obj = {
                 field: field,
                 oldValue: data.modelObj[field],
                 newValue: newValue
-            };
-            retVal.updateData[field] = newValue;
+            }
+            retVal.updateData[field] = newValue
 
-            retVal.changedFields.push(field);
-            retVal.changes.push(obj);
-            data.modelObj[field] = newValue;
+            retVal.changedFields.push(field)
+            retVal.changes.push(obj)
+            data.modelObj[field] = newValue
         }
     }
 
-    return retVal;
-};
+    return retVal
+}

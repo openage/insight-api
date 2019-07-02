@@ -1,37 +1,33 @@
-'use strict';
-const fs = require('fs');
-const path = require('path');
-const basename = path.basename(module.filename);
-const lodash = require('lodash');
+'use strict'
+const fs = require('fs')
+const mongoose = require('mongoose')
+var changeCase = require('change-case')
+const findOrCreate = require('findorcreate-promise')
 
-let initModels = () => {
-    let db = {};
-    fs.readdirSync(__dirname)
-        .filter((file) => {
-            return (file.indexOf('.') !== 0) && (file !== basename);
-        })
-        .forEach((file) => {
-            let model = sequelize['import'](path.join(__dirname, file));
-            db[model.name] = model;
-        });
+var init = function () {
+    // set all the models on db
+    mongoose.plugin(findOrCreate)
 
-    db.user.hasMany(db.reportRequest);
+    fs.readdirSync(__dirname).forEach(function (file) {
+        if (file.indexOf('.js') && file.indexOf('index.js') < 0) {
+            let name = file.split('.')[0]
+            let entity = require('./' + file)
+            entity.timeStamp = {
+                type: Date,
+                default: Date.now
+            }
+            let schema = mongoose.Schema(entity)
 
-    db.user.hasMany(db.favorites);
-    db.favorites.belongsTo(db.user);
+            schema.pre('save', function (next) {
+                this.timeStamp = Date.now()
+                next()
+            })
 
-    db.reportRequest.hasMany(db.favorites);
-    db.favorites.belongsTo(db.reportRequest);
-
-    Object.keys(db).forEach((modelName) => {
-        if ('associate' in db[modelName]) {
-            db[modelName].associate(db);
+            mongoose.model(changeCase.camelCase(name), schema)
         }
-    });
-    return db;
-};
+    })
+}
 
-module.exports = lodash.extend({
-    sequelize: sequelize,
-    Sequelize: Sequelize
-}, initModels());
+init()
+
+module.exports = mongoose.models

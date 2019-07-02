@@ -1,29 +1,33 @@
-'use strict';
+'use strict'
+var mongoose = require('mongoose')
+var dbConfig = require('config').get('dbServer')
 
-const logger = require('@open-age/logger')('database');
-const dbConfig = require('config').get('db');
-global.Sequelize = require('sequelize');
+module.exports.configure = function (logger) {
+    const log = logger.start('settings/database:configure')
+    mongoose.Promise = global.Promise
 
-module.exports.configure =  () => {
-    const sequelize = new Sequelize(
-        dbConfig.database,
-        dbConfig.username,
-        dbConfig.password,
-        {
-            host: dbConfig.host,
-            port: dbConfig.port,
-            dialect: dbConfig.dialect,
-            logging: false,
-        }
-    );
-    global.sequelize = sequelize;
-    global.db = require('../models');
+    let connect = function () {
+        log.info('connecting to', dbConfig)
+        mongoose.connect(dbConfig.host)
+    }
 
-    sequelize.sync().then(() => {
-       logger.info('db connected');
-    }).catch(function(err) {
-        logger.error(err);
-        logger.info('DB Connection Failed');
-    });
-};
+    connect()
 
+    let db = mongoose.connection
+
+    db.on('connected', function () {
+        log.info('DB Connected')
+    })
+
+    db.on('error', function (err) {
+        log.error('Mongoose default connection error: ' + err)
+    })
+
+    db.on('disconnected', function () {
+        log.info('Again going to connect DB')
+        connect()
+    })
+
+    global.db = require('../models')
+    return global.db
+}
