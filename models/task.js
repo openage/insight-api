@@ -1,11 +1,27 @@
 'use strict'
 var mongoose = require('mongoose')
-
 module.exports = {
-    time: Date,
-    assignedTo: String,
-    meta: Object,
-    error: Object,
+    date: Date,
+    entity: {
+        id: String,
+        name: String,
+        type: { type: String }
+    },
+    data: Object,
+
     progress: Number,
-    status: String
+    error: Object,
+
+    organization: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'organization'
+    },
+    tenant: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'tenant'
+    },
+    status: {
+        type: String,
+        enum: ['new', 'invalid', 'in-progress', 'aborted', 'canceled', 'done', 'error']
+    }
 }

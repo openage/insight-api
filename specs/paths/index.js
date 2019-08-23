@@ -158,6 +158,11 @@ const setActionDefaults = (action, options) => {
                     name: param
                 }
             }
+
+            if (!param.name) {
+                param.name = 'body'
+            }
+
             parameters.push(param)
         })
 

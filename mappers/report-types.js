@@ -1,7 +1,7 @@
 'use strict'
 const moment = require('moment')
 
-exports.toModel = function (entity) {
+exports.toModel = (entity, context) => {
     let config = entity.config || {}
 
     let model = {
@@ -9,6 +9,7 @@ exports.toModel = function (entity) {
         code: entity.code,
         name: entity.name,
         icon: entity.icon,
+        view: entity.view,
 
         provider: {
             id: entity.provider.id,
@@ -61,7 +62,9 @@ exports.toModel = function (entity) {
                 label: item.label,
                 key: item.key,
                 type: item.type,
-                format: item.format
+                format: item.format,
+                style: item.style,
+                icon: item.icon
             })
         })
     }
@@ -69,8 +72,8 @@ exports.toModel = function (entity) {
     return model
 }
 
-exports.toSearchModel = entities => {
+exports.toSearchModel = (entities, context) => {
     return entities.map(entity => {
-        return exports.toModel(entity)
+        return exports.toModel(entity, context)
     })
 }

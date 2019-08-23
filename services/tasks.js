@@ -1,38 +1,52 @@
 'use strict'
 
-const logger = require('@open-age/logger')('services/tasks')
 const db = require('../models')
+
+const offline = require('@open-age/offline-processor')
 
 const set = (model, entity, context) => {
     if (model.status) {
         entity.status = model.status
     }
 
-    if (model.message && entity.status === 'error') {
-        entity.error = model.message
+    if (model.message) {
+        entity.error = {
+            message: model.message
+        }
+    }
+
+    if (model.error) {
+        entity.error = model.error
+    }
+
+    if (model.progress) {
+        entity.progress = model.progress
     }
 }
 
-const create = async (model, context) => {
-    const log = logger.start('create')
+exports.create = async (model, context) => {
+    const log = context.logger.start('create')
 
     var task = new db.task({
         data: model.data,
         entity: model.entity,
-        action: model.action,
-        assignedTo: model.assignedTo,
+        progress: model.progress || 0,
         date: model.date || new Date(),
-        employee: model.employee,
-        device: model.device,
-        meta: model.meta,
+        status: model.status || 'new',
         organization: context.organization,
-        status: model.status || 'new'
+        tenant: context.tenant
     })
 
-    return task.save()
+    await task.save()
+
+    await offline.queue('task', 'run', task, context)
+
+    log.end()
+
+    return task
 }
 
-const get = async (query, context) => {
+exports.get = async (query, context) => {
     context.logger.debug('services/tasks:get')
 
     if (!query) {
@@ -49,24 +63,44 @@ const get = async (query, context) => {
     return null
 }
 
-const search = async (query, context) => {
-    const log = logger.start('query')
-    query.organization = context.organization
+exports.search = async (query, page, context) => {
+    const log = context.logger.start('query')
 
-    const items = await db.task.find(query)
+    const where = {
+        organization: context.organization,
+        tenant: context.tenant
+    }
 
-    return items
+    if (!query.status) {
+        where.status = 'new'
+    } else if (query.status !== 'any') {
+        where.status = query.status
+    }
+
+    if (query.from) {
+        where.date = {
+            $gte: query.from
+        }
+    }
+
+    log.end()
+
+    if (!page || !page.limit) {
+        return {
+            items: await db.task.find(where).sort({ timestamp: 1 })
+        }
+    }
+
+    return {
+        items: await db.task.find(where).sort({ timestamp: 1 }).limit(page.limit).skip(page.skip),
+        count: await db.task.count(where)
+    }
 }
 
-const update = async (id, model, context) => {
-    const log = logger.start('update')
+exports.update = async (id, model, context) => {
+    const log = context.logger.start('update')
 
     let entity = await db.task.findById(id)
     set(model, entity, context)
     return entity.save()
 }
-
-exports.get = get
-exports.create = create
-exports.search = search
-exports.update = update

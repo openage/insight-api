@@ -6,6 +6,8 @@ module.exports = {
     name: { type: String },
     descripiton: { type: String },
     icon: String,
+    order: Number,
+    view: String,
     permissions: [String],
     area: {
         type: mongoose.Schema.Types.ObjectId,
@@ -36,7 +38,9 @@ module.exports = {
         dbKey: String,
         type: { type: String },
         format: String,
-        style: Object
+        ascending: { type: Boolean, default: true },
+        style: Object,
+        icon: String
     }],
     header: {
         title: {

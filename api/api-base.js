@@ -1,15 +1,27 @@
 'use strict'
 const pager = require('../helpers/paging')
-module.exports = (name) => {
+
+module.exports = (serviceName, mapperName) => {
+    let name = serviceName
+    mapperName = mapperName || name
     const entityService = require('../services')[name]
-    const entityMapper = require('../mappers')[name]
+    const entityMapper = require('../mappers')[mapperName]
+
+    if (!entityService) {
+        throw new Error(`services.${name} does not exist`)
+    }
+
+    if (!entityMapper) {
+        throw new Error(`mappers.${mapperName} does not exist`)
+    }
+
     return {
         get: async (req) => {
             if (!entityService.get) {
                 throw new Error(`METHOD_NOT_SUPPORTED`)
             }
             let entity = await entityService.get(req.params.id, req.context)
-            return entityMapper.toModel(entity)
+            return entityMapper.toModel(entity, req.context)
         },
         search: async (req) => {
             if (!entityService.search) {
@@ -20,8 +32,10 @@ module.exports = (name) => {
             const entities = await entityService.search(req.query, page, req.context)
 
             let pagedItems = {
-                items: entities.items.map(entityMapper.toModel),
-                total: entities.count
+                items: entities.items.map(i => {
+                    return (entityMapper.toSummary || entityMapper.toModel)(i, req.context)
+                }),
+                total: entities.count || entities.items.length
             }
 
             if (page) {
@@ -37,7 +51,7 @@ module.exports = (name) => {
                 throw new Error(`METHOD_NOT_SUPPORTED`)
             }
             const entity = await entityService.update(req.params.id, req.body, req.context)
-            return entityMapper.toModel(entity)
+            return entityMapper.toModel(entity, req.context)
         },
 
         create: async (req) => {
@@ -45,9 +59,9 @@ module.exports = (name) => {
                 throw new Error(`METHOD_NOT_SUPPORTED`)
             }
             const entity = await entityService.create(req.body, req.context)
-            return entityMapper.toModel(entity)
+            return entityMapper.toModel(entity, req.context)
         },
-        remove: async (req) => {
+        delete: async (req) => {
             if (!entityService.remove) {
                 throw new Error(`METHOD_NOT_SUPPORTED`)
             }

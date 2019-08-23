@@ -1,30 +1,30 @@
 'use strict'
 var mongoose = require('mongoose')
-
 module.exports = {
+    role: {
+        id: String,
+        key: String,
+        code: String,
+        permissions: [{
+            type: String
+        }]
+    },
+    email: String,
+    phone: String,
     code: String,
     profile: {
-        name: String,
-        phone: String,
-        email: String,
+        firstName: String,
+        lastName: String,
+        gender: String,
         dob: Date,
-        gender: String
-    },
-    status: String,
-    pic: {
-        url: {
-            type: String,
-            default: null
+        pic: {
+            url: String,
+            thumbnail: String
         }
-    },
-    role: {
-        id: { type: String },
-        key: { type: String },
-        permissions: [{ type: String }]
     },
 
     config: Object,
-
+    status: String,
     employee: {
         designation: {
             type: String,
@@ -40,16 +40,13 @@ module.exports = {
         }
     },
 
+    lastSeen: Date,
     organization: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'organization'
     },
-
-    recentLogin: {
-        type: Date,
-        default: Date.now
-    },
-
-    created_At: { type: Date, default: Date.now }
-
+    tenant: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'tenant'
+    }
 }

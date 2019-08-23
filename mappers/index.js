@@ -2,14 +2,13 @@
 const fs = require('fs')
 const join = require('path').join
 const camelCase = require('camel-case')
-const _ = require('underscore')
 const mappers = {}
 const init = function () {
     fs.readdirSync(__dirname).forEach(function (file) {
-        if (file.indexOf('.js') && file.indexOf('index.js') < 0) {
+        if (file.indexOf('.js') !== -1 && file.indexOf('index.js') < 0) {
             var mapper = require('./' + file)
 
-            var name = file.substring(0, file.indexOf('.js'))
+            var name = camelCase(file.substring(0, file.indexOf('.js')))
 
             // use toModel as toSummary if one is not defined
             if (!mapper.toSummary) {
@@ -17,18 +16,18 @@ const init = function () {
             }
 
             if (!mapper.toModels) {
-                mapper.toModels = function (entities) {
+                mapper.toModels = function (entities, context) {
                     var models = []
 
-                    _(entities).each(function (entity) {
-                        models.push(mapper.toSummary(entity))
+                    entities.forEach((entity) => {
+                        models.push(mapper.toModel(entity, context))
                     })
 
                     return models
                 }
             }
 
-            mappers[camelCase(name)] = mapper
+            mappers[name] = mapper
         }
     })
 }

@@ -2,6 +2,8 @@ const excelBuilder = require('msexcel-builder')
 const fsConfig = require('config').get('folders')
 const appRoot = require('app-root-path')
 
+const moment = require('moment')
+
 const defaultHeaderStyle = {
     width: 12.0,
     border: {
@@ -47,7 +49,7 @@ const setStyle = (style, defaultStyle) => {
     return style
 }
 
-exports.newWorkbook = fileName => {
+const newWorkbook = fileName => {
     let dir = fsConfig.temp || `${appRoot}/temp/`
 
     let workbook = excelBuilder.createWorkbook(dir, fileName)
@@ -80,7 +82,7 @@ exports.newWorkbook = fileName => {
     }
 }
 
-exports.setRow = (sheet, row, rowNo) => {
+const setRow = (sheet, row, rowNo) => {
     if (!row) {
         return
     }
@@ -132,7 +134,7 @@ exports.setRow = (sheet, row, rowNo) => {
     })
 }
 
-exports.setHeader = (sheet, row, headers) => {
+const setHeader = (sheet, row, headers) => {
     headers.forEach(header => {
         if (header.style.width) {
             sheet.width(header.col, header.style.width)
@@ -144,10 +146,10 @@ exports.setHeader = (sheet, row, headers) => {
         if (header.style.align) {
             sheet.align(header.col, row, header.style.align)
         }
-        if (header.style.width) {
+        if (header.style.border) {
             sheet.border(header.col, row, header.style.border)
         }
-        if (header.style.border) {
+        if (header.style.fill) {
             sheet.fill(header.col, row, header.style.fill)
         }
         sheet.set(header.col, row, header.label)
@@ -156,7 +158,7 @@ exports.setHeader = (sheet, row, headers) => {
     return row
 }
 
-exports.setValue = (sheet, row, header, item) => {
+const setValue = (sheet, row, header, item) => {
     if (header.style.value.font) {
         sheet.font(header.col, row, header.style.value.font)
     }
@@ -174,7 +176,7 @@ exports.setValue = (sheet, row, header, item) => {
     }
 }
 
-exports.buildHeaders = (columns, styles) => {
+const buildHeaders = (columns, styles) => {
     styles = styles || {}
     let headerStyle = setStyle(styles.headers, defaultHeaderStyle)
     let valueStyle = setStyle(styles.values, defaultValueStyle)
@@ -232,4 +234,46 @@ exports.buildHeaders = (columns, styles) => {
     })
 
     return headers
+}
+
+module.exports = (report, totalRows, context) => {
+    let fileName = `${context.organization.code}-${report.type.code}-${moment().format('YY-MM-DD-HH-mm')}.xlsx`
+    const file = newWorkbook(fileName)
+
+    let headers = buildHeaders(report.type.columns)
+    var sheet = file.createSheet(report.type.config.sheet || report.type.code, headers.length + 5, totalRows + 5)
+
+    let currentRow = 0
+
+    return {
+        setRow: (data) => {
+            currentRow = currentRow + 1
+            for (const header of headers) {
+                setValue(sheet, currentRow, header, data)
+            }
+
+            // reportBuilder.setValue(sheet, currentRow, header, formatResult(row, report, context))
+            // excel.setRow(sheet, data, currentRow)
+        },
+
+        setHeader: (sheetHeaderRows) => {
+            sheetHeaderRows.forEach(row => {
+                currentRow = currentRow + 1
+                setRow(sheet, row, currentRow)
+            })
+
+            currentRow = setHeader(sheet, currentRow + 1, headers)
+        },
+        build: async () => {
+            let result = await file.save()
+
+            let filePath = fsConfig.temp ? `${fsConfig.temp}/${result.fileName}` : `${appRoot}/temp/${result.fileName}`
+
+            return {
+                name: result.fileName,
+                path: filePath
+            }
+        }
+
+    }
 }

@@ -1,9 +1,13 @@
 'use strict'
 var mongoose = require('mongoose')
 module.exports = {
-    code: String,
+    code: { type: String, lowercase: true },
     name: String,
     shortName: String,
+    logo: {
+        url: String,
+        thumbnail: String
+    },
     config: Object,
     status: {
         type: String,

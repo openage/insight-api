@@ -1,7 +1,7 @@
 'use strict'
 const moment = require('moment')
 
-exports.toModel = function (entity) {
+exports.toModel = (entity, context) => {
     let model = {
         id: entity.id,
         count: entity.count,
@@ -64,8 +64,8 @@ exports.toModel = function (entity) {
     return model
 }
 
-exports.toSearchModel = entities => {
+exports.toSearchModel = (entities, context) => {
     return entities.map(entity => {
-        return exports.toModel(entity)
+        return exports.toModel(entity, context)
     })
 }

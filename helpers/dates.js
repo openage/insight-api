@@ -36,6 +36,9 @@ exports.days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday'
 exports.minutes = (fromMinutes) => {
     return {
         toString: () => {
+            if (!fromMinutes) {
+                fromMinutes = 0
+            }
             let hoursWorked = Math.floor(fromMinutes / 60)
             let minutesWorked = Math.floor(fromMinutes - hoursWorked * 60)
 
@@ -177,6 +180,18 @@ exports.time = (time1) => {
 exports.date = (date1) => {
     date1 = date1 || new Date()
     return {
+        diff: (date2, actual) => {
+            let value = moment(date1).diff(moment(date2), 'day')
+
+            if (actual) {
+                return value
+            }
+            if (value < 0) {
+                value = -value
+            }
+
+            return value
+        },
         day: () => {
             return day(date1)
         },

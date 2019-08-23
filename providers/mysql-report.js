@@ -3,10 +3,23 @@
 const sql = require('../helpers/mysql')
 var moment = require('moment')
 
+const injectToQuery = (report, context) => {
+    let data = {}
+    for (let param of report.params) {
+        data[param.key] = param.value
+    }
+
+    return report.type.config.sql.select.inject(data)
+}
+
 const whereClause = (report, context) => {
     let log = context.logger.start('whereClause')
 
     var whereBuilder = sql.whereBuilder()
+
+    if (report.type.config.isInjectable) {
+        return whereBuilder.build()
+    }
 
     report.type.params.forEach(param => {
         let input = report.params.find(i => i.key === param.key)
@@ -61,99 +74,13 @@ exports.count = (report, context) => {
     return sql.getCount(report.type.provider.config.db, queryString, context)
 }
 
-exports.header = (report, context) => {
-    let headers = []
-
-    let reportType = report.type
-
-    let header = reportType.header || {}
-    if (header.title) {
-        let titleText = header.title.text || report.type.name
-
-        if (header.title.format === 'upper') {
-            titleText = titleText.toUpperCase()
-        }
-
-        headers.push({
-            col: header.title.column || 1,
-            to: report.type.columns.length,
-            text: titleText,
-            style: header.title.style
-        })
-    }
-
-    if (header.organization) {
-        let orgText = header.organization.text || context.organization.code
-
-        if (header.organization.format === 'upper') {
-            orgText = orgText.toUpperCase()
-        }
-        headers.push({
-            col: header.organization.column || 1,
-            to: report.type.columns.length,
-            text: orgText,
-            style: header.organization.style
-        })
-    }
-
-    if (header.date || header.creator) {
-        let contextRow = []
-        if (header.date) {
-            let dateText = `${header.date.label || 'Date:'} ${moment().format(header.date.format || 'DD-MM-YYYY')}`
-            contextRow.push({
-                col: header.date.column || 1,
-                text: dateText,
-                style: header.date.style
-            })
-        }
-
-        if (header.creator) {
-            let creatorText = `${header.creator.label || 'By:'} ${context.user.profile.name}`
-
-            if (header.creator.format === 'upper') {
-                creatorText = creatorText.toUpperCase()
-            }
-
-            contextRow.push({
-                col: header.creator.column || report.type.columns.length,
-                text: creatorText,
-                style: header.creator.style
-            })
-        }
-
-        headers.push(contextRow)
-    }
-
-    if (header.params) {
-        let col = header.params.column || 1
-        let style = header.params.style || {}
-        headers.push({
-            col: col,
-            text: header.creator.label || 'Filters',
-            style: style
-        })
-        report.params.forEach(param => {
-            headers.push([{
-                col: col,
-                text: param.label,
-                style: style
-            }, {
-                col: col + 1,
-                text: param.valueLabel,
-                style: style.value || {}
-            }])
-        })
-    }
-
-    return headers
-}
-
 exports.fetch = async (report, offset, limit, context) => {
     let log = context.logger.start('providers/mysql-report:fetch')
     let groupBy = report.type.config.sql.group ? `GROUP BY ${report.type.config.sql.group}` : ''
+    let select = report.type.config.isInjectable ? injectToQuery(report, context) : report.type.config.sql.select
 
     let queryString = ` 
-    SELECT ${report.type.config.sql.select}
+    SELECT ${select}
     FROM ${report.type.config.sql.from} 
     ${whereClause(report, context)}
     ${groupBy}
@@ -161,26 +88,30 @@ exports.fetch = async (report, offset, limit, context) => {
 
     let items = await sql.getData(report.type.provider.config.db, queryString, context)
 
-    log.debug('fetched')
-    return items.map(function (item) {
-        report.type.columns.forEach(column => {
-            if (column.type === 'date') {
-                let value = item[column.key]
-                if (value) {
-                    item[column.key] = moment(value).format(column.format || 'DD-MM-YYYY')
-                }
-            }
+    log.end('fetched')
+    return items
+}
 
-            if (column.type === 'time') {
-                let value = item[column.key]
-                if (value) {
-                    item[column.key] = moment(value).format(column.format || 'h:mm:ss a')
-                }
-            }
-        })
+exports.footer = async (report, context) => {
+    let log = context.logger.start('providers/mysql-report:footer')
 
-        return item
-    })
+    if (!report.type.config.sql.summary) {
+        return
+    }
+
+    let where = whereClause(report, context)
+
+    let queryString = report.type.config.sql.summary.inject(where)
+
+    let items = await sql.getData(report.type.provider.config.db, queryString, context)
+
+    log.end()
+
+    if (!items || !items.length) {
+        return
+    }
+
+    return items[0]
 }
 exports.cancel = (id) => {
     return sql.cancel(id)

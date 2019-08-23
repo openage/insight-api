@@ -5,7 +5,27 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "uat-insight-api",
+            "name": "dev-api",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceRoot}/bin/api.js",
+            "stopOnEntry": false,
+            "args": [],
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": null,
+            "runtimeExecutable": null,
+            "runtimeArgs": [
+                "--nolazy"
+            ],
+            "env": {
+                "NODE_ENV": "dev"
+            },
+            "console": "internalConsole",
+            "sourceMaps": false,
+            "outputCapture": "std"
+        },
+        {
+            "name": "uat-api",
             "type": "node",
             "request": "launch",
             "program": "${workspaceRoot}/bin/api.js",

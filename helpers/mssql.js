@@ -194,16 +194,14 @@ exports.whereBuilder = function () {
         var clause = pre ? ` WHERE ${pre} AND ` : ' WHERE '
 
         for (var i = 0; i < builder.filters.length; i++) {
-            if (builder.filters[i].op === 'in' || builder.filters[i].op === 'not in') {
-                clause = clause +
-                    builder.filters[i].field + ' ' +
-                    builder.filters[i].op +
-                    ' ' + builder.filters[i].value + ' '
+            if (builder.filters[i].op === 'like') {
+                clause = clause + `${builder.filters[i].field} LIKE '%${builder.filters[i].value}%'`
+            } else if (builder.filters[i].op === 'in') {
+                clause = clause + `${builder.filters[i].field} IN (${builder.filters[i].value})`
+            } else if (builder.filters[i].op === 'not in') {
+                clause = clause + `${builder.filters[i].field} NOT IN (${builder.filters[i].value})`
             } else if (builder.filters[i].field) {
-                clause = clause +
-                    builder.filters[i].field + ' ' +
-                    builder.filters[i].op +
-                    ' \'' + builder.filters[i].value + '\' '
+                clause = clause + `${builder.filters[i].field} ${builder.filters[i].op} '${builder.filters[i].value}'`
             } else {
                 clause = clause + builder.filters[i]
             }

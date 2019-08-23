@@ -2,11 +2,30 @@
 const offline = require('@open-age/offline-processor')
 const db = require('../models')
 const reportTypes = require('./report-types')
+const mapper = require('../mappers/reportColumns')
 
 const populate = {
     path: 'type',
     populate: {
         path: 'provider area user'
+    }
+}
+
+const set = async (model, entity, context) => {
+    if (model.params) {
+        entity.params = model.params
+    }
+
+    let generate = false
+    if (model.status) {
+        if (model.status !== entity.status && model.status === 'new') {
+            generate = true
+        }
+        entity.status = model.status
+    }
+
+    if (generate) {
+        await offline.queue('report', 'create', entity, context)
     }
 }
 
@@ -21,7 +40,8 @@ exports.create = async (model, context) => {
         params: model.params,
         status: 'draft',
         user: context.user,
-        organization: context.organization
+        organization: context.organization,
+        tenant: context.tenant
     })
 
     let report = await entity.save()
@@ -30,40 +50,35 @@ exports.create = async (model, context) => {
 
 exports.update = async (id, model, context) => {
     const report = await exports.get(id, context)
-
-    if (model.params) {
-        report.params = model.params
-    }
-
-    let generate = false
-    if (model.status) {
-        if (model.status !== report.status && model.status === 'new') {
-            generate = true
-        }
-        report.status = model.status
-    }
-
+    await set(model, report, context)
     await report.save()
-
-    if (generate) {
-        await offline.queue('report', 'create', report, context)
-    }
-
     return report
 }
 
 exports.data = async (id, page, context) => {
+    const log = context.logger.start('services/reports:data')
     const report = await exports.get(id, context)
     const provider = require(`../providers/${report.type.provider.handler}`)
     let count = await provider.count(report, context)
     page = page || {}
     let data = await provider.fetch(report, page.skip, page.limit, context)
 
+    data = data.map(i => mapper.formatResult(i, report, context))
+
+    let stats
+
+    if (provider.footer) {
+        stats = await provider.footer(report, context)
+        stats = mapper.formatResult(stats, report, context)
+    }
+
     let pagedItems = {
         items: data,
+        stats: stats,
         total: count
     }
 
+    log.end()
     return pagedItems
 }
 
@@ -71,7 +86,8 @@ exports.search = async (query, page, context) => {
     const log = context.logger.start('services/reports:search')
 
     let where = {
-        organization: context.organization
+        organization: context.organization,
+        tenant: context.tenant
     }
     if (query.type) {
         where.type = query.type
@@ -98,6 +114,8 @@ exports.search = async (query, page, context) => {
         items = await db.report.find(where).populate(populate).sort({ requestedAt: -1 })
     }
 
+    log.end()
+
     return {
         count: count,
         items: items
@@ -105,11 +123,10 @@ exports.search = async (query, page, context) => {
 }
 
 exports.get = async (query, context) => {
-    let log = context.logger.start('services/reports:get')
+    context.logger.silly('services/reports:get')
     if (typeof query === 'string' && query.isObjectId()) {
         return db.report.findById(query).populate(populate)
     } else if (query.id) {
         return db.report.findById(query.id).populate(populate)
     }
-    return null
 }

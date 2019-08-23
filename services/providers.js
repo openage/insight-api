@@ -1,27 +1,41 @@
 'use strict'
-const offline = require('@open-age/offline-processor')
 const db = require('../models')
 
-const create = async (model, context) => {
-    const log = context.logger.start('services/providers:create')
-    var enitity = new db.provider({
-        code: model.code,
-        name: model.name,
-        config: model.config
-        // organization: context.organization
-    })
+const set = async (model, entity, context) => {
+    if (model.name) {
+        entity.name = model.name
+    }
 
-    let report = await enitity.save()
-    return report
+    if (model.config) {
+        entity.config = model.config
+    }
 }
 
-exports.create = create
+exports.create = async (model, context) => {
+    var entity = new db.provider({
+        code: model.code,
+        name: model.name,
+        config: model.config,
+        organization: context.organization,
+        tenant: context.tenant
+    })
 
-const search = async (query, page, context) => {
-    const log = context.logger.start('services/providers:search')
+    await set(model, entity, context)
+    await entity.save()
+    return entity
+}
 
+exports.update = async (id, model, context) => {
+    let entity = await exports.get(id, context)
+    await set(model, entity, context)
+    await entity.save()
+    return entity
+}
+
+exports.search = async (query, page, context) => {
     let where = {
-        // organization: context.organization
+        organization: context.organization,
+        tenant: context.tenant
     }
 
     const count = await db.provider.find(where).count()
@@ -38,26 +52,32 @@ const search = async (query, page, context) => {
         items: items
     }
 }
-exports.search = search
+
+exports.getByCode = async (code, context) => {
+    let entity = await db.provider.findOne({
+        code: code.toLowerCase(),
+        organization: context.organization
+    })
+    if (entity) {
+        return entity
+    }
+    return db.provider.findOne({
+        code: code.toLowerCase(),
+        organization: { $exists: false },
+        tenant: context.tenant
+    })
+}
 
 exports.get = async (query, context) => {
-    const log = context.logger.start('services/providers:get')
-    let entity
-    let where = {
-        // organization: context.organization
-    }
+    context.logger.silly('services/providers:get')
     if (typeof query === 'string') {
         if (query.isObjectId()) {
-            entity = await db.provider.findById(query)
+            return db.provider.findById(query)
         }
-        where['code'] = query
-        entity = await db.provider.findOne(where)
+        return this.getByCode(query, context)
     } else if (query.id) {
-        entity = await db.provider.findById(query.id)
+        return db.provider.findById(query.id)
     } else if (query.code) {
-        where['code'] = query.code
-        entity = await db.provider.findOne(where)
+        return this.getByCode(query.code, context)
     }
-    log.end()
-    return entity
 }
