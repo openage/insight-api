@@ -1,11 +1,14 @@
 'use strict'
 
-exports.toModel = (entity) => {
+const userMapper = require('./user')
+
+exports.toModel = (entity, context) => {
     const model = {
         message: entity.message,
         meta: entity.meta,
         type: entity.type,
         changes: [],
+        user: userMapper.toModel(entity.user, context),
         timeStamp: entity.timeStamp
     }
 
@@ -26,14 +29,6 @@ exports.toModel = (entity) => {
         }
     }
 
-    if (entity.user && entity.user._doc) {
-        model.user = entity.user._doc
-    } else {
-        model.user = {
-            id: entity.user
-        }
-    }
-
     if (entity.organization && entity.organization._doc) {
         model.organization = {
             id: entity.organization.id
@@ -41,16 +36,6 @@ exports.toModel = (entity) => {
     } else {
         model.organization = {
             id: entity.organization
-        }
-    }
-
-    if (entity.tenant && entity.tenant._doc) {
-        model.tenant = {
-            id: entity.tenant.id
-        }
-    } else {
-        model.tenant = {
-            id: entity.tenant
         }
     }
 

@@ -37,14 +37,22 @@ module.exports.configure = (app, logger) => {
     })
 
     var api = apiRoutes(app, { context: { builder: contextBuilder.create } })
-    api.model('logs').register('REST', { permissions: 'tenant.user' })
 
-    api.model('reports').register('REST', { permissions: 'tenant.user' })
-    api.model('reportTypes').register('REST', { permissions: 'tenant.user' })
+    for (const route of specs.routes()) {
+        api.model({
+            root: route.name,
+            controller: route.controller
+        }).register(route.routes)
+    }
 
-    api.model('reportAreas').register('REST', { permissions: 'tenant.user' })
-    api.model('providers').register('REST', { permissions: 'tenant.user' })
-    api.model('journals').register('REST', { permissions: 'tenant.user' })
+    // api.model('logs').register('REST', { permissions: 'tenant.user' })
+
+    // api.model('reports').register('REST', { permissions: 'tenant.user' })
+    // api.model('reportTypes').register('REST', { permissions: 'tenant.user' })
+
+    // api.model('reportAreas').register('REST', { permissions: 'tenant.user' })
+    // api.model('providers').register('REST', { permissions: 'tenant.user' })
+    // api.model('journals').register('REST', { permissions: 'tenant.user' })
 
     logger.end()
 }

@@ -9,7 +9,7 @@ the `index.file` uses the files in `definitions` and `paths` folder to construct
         version: require('../package.json').version,
         title: require('../package.json').name
     },
-    host: require('config').webServer.rootUrl,
+    host: require('config').webServer.url,
     basePath: '/api',
     schemes: [
         'http'

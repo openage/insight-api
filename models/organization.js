@@ -9,6 +9,29 @@ module.exports = {
         thumbnail: String
     },
     config: Object,
+    services: [{
+        logo: String,
+        code: String,
+        name: String,
+        url: String, // api root url
+        hooks: {
+            project: {
+                onCreate: String,
+                onUpdate: String,
+                onDelete: String
+            },
+            task: {
+                onCreate: String,
+                onUpdate: String,
+                onDelete: String
+            }
+        }
+    }],
+    owner: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'user'
+    },
+    meta: Object,
     status: {
         type: String,
         default: 'active',

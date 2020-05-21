@@ -4,6 +4,10 @@ module.exports = {
     name: String,
     icon: String,
     permissions: [String],
+    organization: { // optional
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'organization'
+    },
     tenant: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'tenant'

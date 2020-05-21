@@ -4,92 +4,60 @@ const locks = require('./locks')
 
 const defaultConfig = require('config').get('organization')
 
-const directory = require('@open-age/directory-client')
-const tenants = require('../services/tenants')
-const organizations = require('../services/organizations')
 const users = require('../services/users')
 
-const getUserByRoleKey = async (roleKey, logger) => {
-    let log = logger.start('getUserByRoleKey')
-
-    let user = await db.user.findOne({
-        'role.key': roleKey
-    }).populate('organization tenant')
-
-    if (user) { return user }
-
-    let role = await directory.getRole(roleKey, { logger: log })
-
-    log.debug(role)
-
-    if (!role) {
-        throw new Error('ROLE_KEY_INVALID')
-    }
-
-    const context = await exports.create({}, logger)
-
-    if (role.tenant) {
-        let tenant = await tenants.get({
-            code: role.tenant.code
-        }, context)
-
-        if (!tenant) {
-            tenant = await tenants.create(role.tenant, context)
-        }
-
-        await context.setTenant(tenant)
-    }
-
-    if (role.organization) {
-        let organization = await organizations.get({
-            code: role.organization.code
-        }, context)
-
-        if (!organization) {
-            organization = await organizations.create(role.organization, context)
-        }
-        await context.setOrganization(organization)
-    }
-
-    user = await users.create({
-        role: {
-            id: role.id,
-            code: role.code,
-            key: role.key,
-            permissions: role.permissions
-        },
-        code: role.code,
-        email: role.email,
-        phone: role.phone,
-        profile: role.profile
-    }, context)
-
-    log.end()
-    return user
-}
-
 exports.create = async (claims, logger) => {
+    // TODO: workaround for a defect in parsing the context id
+    // @open-age/express-api/parsers/claims.js <- fix here
+    let id = claims.id
+    if (id && id.id) {
+        id = id.id
+    }
+
     let context = {
-        id: claims.id,
+        id: id,
         logger: logger || claims.logger,
         config: defaultConfig,
         permissions: []
     }
 
-    let log = context.logger.start('context-builder:create')
+    context.getConfig = (identifier, defaultValue) => {
+        let keys = identifier.split('.')
+        let value = context.config
 
-    if (claims.role && claims.role.key) {
-        claims.user = await getUserByRoleKey(claims.role.key, log)
+        for (let key of keys) {
+            if (!value[key]) {
+                value = null
+                break
+            }
+            value = value[key]
+        }
+
+        if (!value) {
+            value = defaultConfig
+            for (let key of keys) {
+                if (!value[key]) {
+                    return defaultValue
+                }
+                value = value[key]
+            }
+        }
+
+        return value
     }
+
+    let log = context.logger.start('context-builder:create')
 
     context.setUser = async (user) => {
         if (!user) {
             return
         }
-        if (user._doc) {
+        if (user._bsontype === 'ObjectId') {
+            context.user = await db.user.findById(user)
+        } else if (user._doc) {
             context.user = user
         } else if (user.id) {
-            context.user = await db.user.findById(user.id).populate('organization tenant')
+            context.user = await users.get(user.id)
         }
 
         if (!context.tenant) {
@@ -114,7 +82,9 @@ exports.create = async (claims, logger) => {
         if (!organization) {
             return
         }
-        if (organization._doc) {
+        if (organization._bsontype === 'ObjectID') {
+            context.organization = await db.organization.findById(organization).populate('tenant')
+        } else if (organization._doc) {
             context.organization = organization
         } else if (organization.id) {
             context.organization = await db.organization.findById(organization.id).populate('tenant')
@@ -144,10 +114,12 @@ exports.create = async (claims, logger) => {
         if (!tenant) {
             return
         }
-        if (tenant._doc) {
+        if (tenant._bsontype === 'ObjectId') {
+            context.tenant = await db.tenant.findById(tenant).populate('owner')
+        } else if (tenant._doc) {
             context.tenant = tenant
         } else if (tenant.id) {
-            context.tenant = await db.tenant.findOne({ _id: tenant.id }).populate('owner')
+            context.tenant = await db.tenant.findById(tenant.id).populate('owner')
         } else if (tenant.key) {
             context.tenant = await db.tenant.findOne({ key: tenant.key }).populate('owner')
         } else if (tenant.code) {
@@ -160,6 +132,10 @@ exports.create = async (claims, logger) => {
             id: context.tenant.id,
             code: context.tenant.code
         }
+    }
+
+    if (claims.role && claims.role.key) {
+        claims.user = await users.get(claims.role.key, context)
     }
 
     await context.setTenant(claims.tenant)

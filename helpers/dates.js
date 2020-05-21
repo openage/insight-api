@@ -5,20 +5,20 @@ const day = (date) => {
     let day = date ? moment(date).weekday() : moment().weekday()
 
     switch (day) {
-    case 0:
-        return 'sunday'
-    case 1:
-        return 'monday'
-    case 2:
-        return 'tuesday'
-    case 3:
-        return 'wednesday'
-    case 4:
-        return 'thursday'
-    case 5:
-        return 'friday'
-    case 6:
-        return 'saturday'
+        case 0:
+            return 'sunday'
+        case 1:
+            return 'monday'
+        case 2:
+            return 'tuesday'
+        case 3:
+            return 'wednesday'
+        case 4:
+            return 'thursday'
+        case 5:
+            return 'friday'
+        case 6:
+            return 'saturday'
     }
 }
 
@@ -173,13 +173,33 @@ exports.time = (time1) => {
                 .set('second', moment(time2).seconds())
 
             return (timeA.isAfter(timeB, 's'))
+        },
+        toString: (format) => {
+            format = format || 'h:mm:ss a'
+            return moment(time1).format(format)
         }
     }
 }
 
 exports.date = (date1) => {
     date1 = date1 || new Date()
+
+    if (date1 === 'today') {
+        date1 = new Date()
+    }
+
     return {
+        dates: (count) => {
+            let items = []
+
+            if (typeof count === 'number') {
+                for (let i = 0; i < count; i++) {
+                    items.push(moment(date1).add(i, 'day').startOf('day').toDate())
+                }
+            }
+
+            return items
+        },
         diff: (date2, actual) => {
             let value = moment(date1).diff(moment(date2), 'day')
 
@@ -209,6 +229,9 @@ exports.date = (date1) => {
         bom: () => {
             return moment(date1).startOf('month').toDate()
         },
+        boy: () => {
+            return moment(date1).startOf('year').toDate()
+        },
         previousWeek: () => {
             return moment(date1).subtract(7, 'days').startOf('day').toDate()
         },
@@ -234,6 +257,9 @@ exports.date = (date1) => {
         eom: () => {
             return moment(date1).endOf('month').toDate()
         },
+        eoy: () => {
+            return moment(date1).endOf('year').toDate()
+        },
         add: (days) => {
             return moment(date1).add(days, 'day').toDate()
         },
@@ -255,12 +281,22 @@ exports.date = (date1) => {
         isToday: () => {
             return moment(date1).startOf('day').isSame(moment(new Date()).startOf('day'))
         },
+
+        isPast: () => {
+            return moment(date1).startOf('day').isBefore(moment(new Date()).startOf('day'))
+        },
+        isFuture: () => {
+            return moment(date1).startOf('day').isAfter(moment(new Date()).startOf('day'))
+        },
         isBetween: (from, till) => {
             return moment(date1).isBetween(moment(from), moment(till), 'day', '[]')
         },
         toString: (format) => {
-            format = format || 'dddd, MMMM Do YYYY'
+            format = format || 'DD-MM-YYYY'
             return moment(date1).format(format)
+        },
+        toCron: () => {
+            return moment(date1).format('s m H D MMM YYYY').toUpperCase()
         }
     }
 }

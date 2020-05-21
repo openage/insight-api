@@ -37,36 +37,40 @@ exports.create = async (model, context) => {
 }
 
 exports.update = async (id, model, context) => {
-    if (id === 'me') {
+    if (id === 'me' || id === 'my') {
         id = context.organization.id
     }
 
-    let organization = await db.organization.findById(id).populate('owner')
-    await set(model, organization, context)
-    return organization.save()
+    let entity = await db.organization.findById(id)
+
+    await set(model, entity, context)
+
+    return entity.save()
 }
 
 exports.get = async (query, context) => {
+    context.logger.start('services/organizations:get')
+    let entity
+    let where = {
+        tenant: context.tenant
+    }
     if (typeof query === 'string') {
+        if (query === 'me' || query === 'my') {
+            return context.organization
+        }
         if (query.isObjectId()) {
-            return db.organization.findById(query).populate('owner')
-        } else {
-            if (query === 'me') {
-                return db.organization.findById(context.organization.id).populate('tenant')
-            }
-            return db.organization.findOne({ code: query.toLowerCase(), tenant: context.tenant }).populate('tenant')
+            return db.organization.findById(query)
         }
-    }
-
-    if (query.id) {
-        if (query.id === 'me') {
-            return db.organization.findById(context.organization.id).populate('owner')
+        where['code'] = query
+        return db.organization.findOne(where)
+    } else if (query.id) {
+        if (query.id === 'me' || query.id === 'my') {
+            return context.organization
         }
-        return db.organization.findById(query.id).populate('owner')
-    }
-
-    if (query.code) {
-        return db.organization.findOne({ code: query.code.toLowerCase(), tenant: context.tenant }).populate('owner')
+        return db.organization.findById(query.id)
+    } else if (query.code) {
+        where['code'] = query.code
+        return db.organization.findOne(where)
     }
 
     return null

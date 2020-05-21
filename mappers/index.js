@@ -1,14 +1,13 @@
 'use strict'
 const fs = require('fs')
-const join = require('path').join
-const camelCase = require('camel-case')
+const changeCase = require('change-case')
 const mappers = {}
 const init = function () {
     fs.readdirSync(__dirname).forEach(function (file) {
         if (file.indexOf('.js') !== -1 && file.indexOf('index.js') < 0) {
             var mapper = require('./' + file)
 
-            var name = camelCase(file.substring(0, file.indexOf('.js')))
+            var name = file.substring(0, file.indexOf('.js'))
 
             // use toModel as toSummary if one is not defined
             if (!mapper.toSummary) {
@@ -16,18 +15,14 @@ const init = function () {
             }
 
             if (!mapper.toModels) {
-                mapper.toModels = function (entities, context) {
-                    var models = []
-
-                    entities.forEach((entity) => {
-                        models.push(mapper.toModel(entity, context))
+                mapper.toModels = (entities) => {
+                    return entities.map((entity) => {
+                        return mapper.toSummary(entity)
                     })
-
-                    return models
                 }
             }
 
-            mappers[name] = mapper
+            mappers[changeCase.camelCase(name)] = mapper
         }
     })
 }

@@ -20,11 +20,11 @@ module.exports.configure = function (logger) {
     })
 
     db.on('error', function (err) {
-        log.error('Mongoose default connection error: ' + err)
+        log.error('connection error: ' + err)
     })
 
     db.on('disconnected', function () {
-        log.info('Again going to connect DB')
+        log.info('connecting again')
         connect()
     })
 

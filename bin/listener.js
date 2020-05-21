@@ -9,7 +9,7 @@ require('../helpers/string')
 require('../helpers/number')
 require('../helpers/toObjectId')
 require('../helpers/period')
-
+logger.info(`environment: ${process.env.NODE_ENV}`)
 require('../settings/database').configure(logger)
 require('../settings/offline-processor').configure(logger)
 offline.listen(process.env.QUEUE_NAME, require('@open-age/logger')('LISTEN'))

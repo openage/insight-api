@@ -19,7 +19,7 @@ module.exports = {
         field: String,
         type: { type: String },
         value: String,
-        oldValue: String,
+        oldValue: String
     }],
     user: {
         type: mongoose.Schema.Types.ObjectId,
@@ -32,6 +32,5 @@ module.exports = {
     tenant: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'tenant'
-        //    required: true TODO: add tenant to prod
     }
 }

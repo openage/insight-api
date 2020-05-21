@@ -3,13 +3,10 @@
 /public/public/bower_components
 /.idea
 .jenkins
-
-/temp/*
-!/temp/*.txt
-
 /logs/*
 !/logs/*.txt
-
-/config/*.json
+/temp/*
+!/temp/*.txt
+/config/*
 !/config/default.json
 

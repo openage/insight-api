@@ -1,4 +1,3 @@
-'use strict'
 var mongoose = require('mongoose')
 module.exports = {
     role: {
@@ -25,28 +24,7 @@ module.exports = {
 
     config: Object,
     status: String,
-    employee: {
-        designation: {
-            type: String,
-            default: ''
-        },
-        department: {
-            type: String,
-            default: ''
-        },
-        division: {
-            type: String,
-            default: ''
-        }
-    },
-
-    lastSeen: Date,
-    organization: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'organization'
-    },
-    tenant: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'tenant'
-    }
+    supervisor: { type: mongoose.Schema.Types.ObjectId, ref: 'user' },
+    organization: { type: mongoose.Schema.Types.ObjectId, ref: 'organization' },
+    tenant: { type: mongoose.Schema.Types.ObjectId, ref: 'tenant' }
 }

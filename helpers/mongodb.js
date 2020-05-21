@@ -13,7 +13,7 @@ const getConnection = (host) => {
 const aggregateArray = (host, database, collection, finder) => {
     return getConnection(host).then(connection => {
         return new Promise((resolve, reject) => {
-            return connection.db(database).collection(collection).aggregate(finder,{allowDiskUse: true, collation:{"locale" : "en", numericOrdering: true}}).toArray((err, rows) => {
+            return connection.db(database).collection(collection).aggregate(finder, { allowDiskUse: true, collation: { 'locale': 'en', numericOrdering: true } }).toArray((err, rows) => {
                 connection.close()
                 if (err) {
                     return reject(err)
@@ -126,7 +126,7 @@ exports.db = (provider) => {
 //         }
 
 //         for (var i = 0; i < builder.filters.length; i++) {
-//             clause[`${this.builer.filters[i].field}`] = 
+//             clause[`${this.builer.filters[i].field}`] =
 //                 clause = clause + `${this.builer.filters[i].field}: ${this.builer.filters[i].value}, `
 //         }
 //         clause = clause + '} },'

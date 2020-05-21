@@ -35,7 +35,7 @@ const set = async (model, entity, context) => {
 }
 
 exports.update = async (id, model, context) => {
-    if (id === 'me') {
+    if (id === 'me' || id === 'my') {
         id = context.tenant.id
     }
     let tenant = await db.tenant.findById(id).populate('owner')
@@ -65,7 +65,7 @@ exports.get = async (query, context) => {
         if (query.isObjectId()) {
             return db.tenant.findById(query).populate('owner')
         } else {
-            if (query === 'me') {
+            if (query === 'me' || query === 'my') {
                 return db.tenant.findById(context.tenant.id).populate('owner')
             }
             return db.tenant.findOne({ code: query.toLowerCase() }).populate('owner')
@@ -73,7 +73,7 @@ exports.get = async (query, context) => {
     }
 
     if (query.id) {
-        if (query.id === 'me') {
+        if (query.id === 'me' || query.id === 'my') {
             return db.tenant.findById(context.tenant.id).populate('owner')
         }
         return db.tenant.findById(query.id).populate('owner')
@@ -84,23 +84,6 @@ exports.get = async (query, context) => {
     }
 
     return null
-}
-
-exports.getOrCreate = async (model, context) => {
-    let log = context.logger.start('services/tenants:clone')
-
-    let tenant = await exports.get(model, context)
-
-    if (!tenant) {
-        tenant = new db.tenant({
-            name: model.name,
-            code: model.code.toLowerCase(),
-            status: 'active'
-        }).save()
-    }
-
-    log.end()
-    return tenant
 }
 
 exports.search = async (query, page, context) => {

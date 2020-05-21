@@ -66,7 +66,7 @@ exports.fetch = async (report, offset, limit, context) => {
       ${groupBy}`
 
     if (report.type.config.sql.sort) {
-        if (limit && offset) {
+        if (offset >= 0 && limit) {
             queryString = ` 
               SELECT TOP ${limit} * FROM(
               SELECT ${report.type.config.sql.select}, ROW_NUMBER() OVER(ORDER BY ${report.type.config.sql.sort}) AS __i
@@ -81,7 +81,7 @@ exports.fetch = async (report, offset, limit, context) => {
               ${whereClause(report, context)}
               ${groupBy}`
         }
-    } else if (limit && offset) {
+    } else if (offset >= 0 && limit) {
         queryString = ` 
           SELECT TOP ${limit} * FROM(
           SELECT ${report.type.config.sql.select}
@@ -100,13 +100,13 @@ exports.fetch = async (report, offset, limit, context) => {
 exports.footer = async (report, context) => {
     let log = context.logger.start('providers/mssql-report:footer')
 
-    if (!report.type.config.sql.summary) {
+    if (!report.type.config.sql.summary || !report.type.config.sql.summary.select || !report.type.config.sql.summary.from) {
         return
     }
 
     let where = whereClause(report, context)
 
-    let queryString = `${report.type.config.sql.summary} ${where}`
+    let queryString = `${report.type.config.sql.summary.select} ${report.type.config.sql.summary.from} ${where} ${report.type.config.sql.summary.group ? report.type.config.sql.summary.group : ''}`
 
     let items = await sql.getData(report.type.provider.config.db, queryString, context)
 

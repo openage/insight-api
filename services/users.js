@@ -4,6 +4,10 @@ const directory = require('@open-age/directory-client')
 
 const validator = require('validator')
 
+const tenantService = require('./tenants')
+const organizationService = require('./organizations')
+const populate = 'organization tenant'
+
 const set = async (model, entity, context) => {
     if (model.status) {
         entity.status = model.status
@@ -13,7 +17,7 @@ const set = async (model, entity, context) => {
         entity.email = model.email.toLowerCase().replace(' ', '')
     }
 
-    if (model.phone && validator.isMobilePhone(model.phone)) {
+    if (model.phone && validator.isMobilePhone(model.phone, 'any')) {
         entity.phone = model.phone.trim().replace(' ', '')
     }
 
@@ -26,6 +30,7 @@ const set = async (model, entity, context) => {
     }
 
     if (model.profile) {
+        entity.profile = entity.profile || {}
         entity.profile.firstName = model.profile.firstName
         entity.profile.lastName = model.profile.lastName
         entity.profile.gender = model.profile.gender
@@ -38,9 +43,10 @@ const set = async (model, entity, context) => {
     }
 
     if (model.role) {
+        entity.role = entity.role || {}
         if (entity.role.id && model.role.id && model.role.id !== entity.role.id) {
             // role id cannot be changed
-            throw new Error('ID_UNMUTABLE')
+            throw new Error('ID_IMMUTABLE')
         } else if (!entity.role.id && model.role.id) {
             entity.role.id = model.role.id
         }
@@ -56,35 +62,186 @@ const set = async (model, entity, context) => {
             entity.role.permissions = model.role.permissions
         }
     }
+}
 
-    if (model.employee) {
-        entity.employee = {
-            designation: model.employee.designation ? model.employee.designation.name : '',
-            department: model.employee.department ? model.employee.department.name : '',
-            division: model.employee.division ? model.employee.division.name : ''
+const getFromDirectory = async (query, context) => {
+    let role = await directory.roles.get(query, context)
+
+    if (!role) {
+        throw new Error('ROLE_NOT_FOUND')
+    }
+
+    let user = await db.user.findOne({
+        'role.id': role.id
+    }).populate(populate)
+
+    if (role.tenant && context.tenant && role.tenant.code !== context.tenant.code) {
+        throw new Error('ROLE_INVALID')
+    }
+
+    if (role.organization && context.organization && role.organization.code !== context.organization.code) {
+        throw new Error('ROLE_INVALID')
+    }
+
+    if (role.tenant && !context.tenant) {
+        let tenant = await tenantService.get({
+            code: role.tenant.code
+        }, context)
+
+        if (!tenant) {
+            tenant = await tenantService.create(role.tenant, context)
+        }
+
+        await context.setTenant(tenant)
+    }
+
+    if (role.organization && !context.organization) {
+        let organization = await organizationService.get({
+            code: role.organization.code
+        }, context)
+
+        if (!organization) {
+            organization = await organizationService.create(role.organization, context)
+        }
+
+        await context.setOrganization(organization)
+    }
+
+    if (!user) {
+        user = new db.user({
+            role: {
+                id: role.id
+            },
+            tenant: context.tenant,
+            organization: context.organization,
+            status: 'new'
+        })
+    }
+
+    let model = {
+        role: {
+            id: role.id,
+            code: role.code,
+            key: role.key,
+            permissions: role.permissions
+        },
+        code: role.code,
+        email: role.email,
+        phone: role.phone,
+        profile: role.profile,
+        status: role.status
+    }
+
+    if (role.user) {
+        model.phone = model.phone || role.user.phone
+        model.email = model.email || role.user.email
+        model.status = model.status || role.user.status
+        if (role.user.profile) {
+            model.profile = role.user.profile
         }
     }
+
+    if (role.employee) {
+        model.tackingId = role.employee.id
+        model.profile = role.employee.profile || model.profile
+        model.designation = role.employee.designation
+        model.department = role.employee.department
+        model.division = role.employee.division
+        model.phone = role.employee.phone || model.phone
+        model.email = role.employee.email || model.email
+        model.code = role.employee.code || model.code
+        model.type = 'employee'
+    } else if (role.student) {
+        model.tackingId = role.student.id
+        model.profile = role.student.profile || model.profile
+        model.designation = role.student.batch
+        model.department = role.student.course
+        model.division = role.student.institute
+        model.phone = role.student.phone || model.phone
+        model.email = role.student.email || model.email
+        model.code = role.student.code || model.code
+        model.type = 'student'
+    }
+
+    await set(model, user, context)
+
+    return user.save()
+}
+
+const getByCode = async (code, context) => {
+    context.logger.start('services/users:getByCode')
+
+    let user = await db.user.findOne({
+        code: code.toLowerCase(),
+        tenant: context.tenant,
+        organization: context.organization
+    }).populate(populate)
+
+    if (!user) {
+        user = await db.user.findOne({
+            'role.code': code.toLowerCase(),
+            tenant: context.tenant,
+            organization: context.organization
+        }).populate(populate)
+
+        if (user) {
+            user.code = user.role.code
+            await user.save()
+        }
+    }
+
+    if (user) { return user }
+
+    return getFromDirectory(code, context)
+}
+
+const getByRoleId = async (roleId, context) => {
+    context.logger.start('services/users:getById')
+
+    let user = await db.user.findOne({
+        'role.id': roleId
+    }).populate(populate)
+
+    if (user) { return user }
+
+    return getFromDirectory(roleId, context)
+}
+
+const getByEmail = async (email, context) => {
+    context.logger.start('services/users:getByEmail')
+
+    let user = await db.user.findOne({
+        email: email.toLowerCase(),
+        organization: context.organization,
+        tenant: context.tenant
+    }).populate(populate)
+
+    if (user) { return user }
+
+    return getFromDirectory(email, context)
+}
+
+const getByPhone = async (phone, context) => {
+    context.logger.start('services/users:getByPhone')
+
+    let user = await db.user.findOne({
+        phone: phone,
+        organization: context.organization,
+        tenant: context.tenant
+    }).populate(populate)
+
+    if (user) { return user }
+
+    return getFromDirectory(phone, context)
 }
 
 exports.create = async (model, context) => {
     let user = null
 
-    if (model.trackingId) {
-        user = await exports.get({ trackingId: model.trackingId }, context)
-    }
-
-    if (!user && model.email) {
-        user = await exports.get({ email: model.email }, context)
-    }
-
-    if (!user && model.phone) {
-        user = await exports.get({ phone: model.phone }, context)
-    }
+    user = await exports.get(model, context)
 
     if (!user) {
         user = new db.user({
-            role: {},
-            profile: {},
             tenant: context.tenant,
             organization: context.organization,
             status: 'new'
@@ -101,62 +258,22 @@ exports.update = async (id, model, context) => {
     return entity.save()
 }
 
-exports.getByRoleId = async (roleId, context) => {
-    let log = context.logger.start('services/users:getByKey')
-
-    let user = await db.user.findOne({
-        'role.id': roleId
-    }).populate('organization tenant')
-
-    if (user) { return user }
-
-    let role = await directory.getRoleById(roleId)
-
-    context.logger.debug(role)
-
-    if (!role) {
-        throw new Error('role not found')
-    }
-
-    if (role.tenant.code !== context.tenant.code) {
-        throw new Error('ROLE_ID_INVALID')
-    }
-
-    if (role.organization && context.organization && role.organization.code !== context.organization.code) {
-        throw new Error('ROLE_ID_INVALID')
-    }
-
-    user = await exports.create({
-        role: {
-            id: role.id,
-            code: role.code,
-            key: role.key,
-            permissions: role.permissions
-        },
-        code: role.code,
-        email: role.email,
-        phone: role.phone,
-        profile: role.profile,
-        address: role.address
-    }, context)
-    log.end()
-    return user
-}
-
 exports.get = async (query, context) => {
-    let where = {
-        tenant: context.tenant,
-        organization: context.organization
-    }
     if (typeof query === 'string') {
-        if (query.isObjectId()) {
-            return db.user.findById(query).populate('tenant organization')
+        if (query === 'my') {
+            return context.user
+        } else if (query === 'system' && context.tenant.owner) {
+            return db.user.findById(context.tenant.owner).populate(populate)
+        } else if (query.isObjectId()) {
+            return db.user.findById(query).populate(populate)
+        } else if (query.isUUID()) {
+            return getByKey(query, context)
+        } else if (query.isEmail()) {
+            return getByEmail(query, context)
+        } else if (query.isPhone()) {
+            return getByPhone(query, context)
         } else {
-            if (query === 'me') {
-                return context.user
-            }
-            where.code = query.toLowerCase()
-            return db.user.findOne(where).populate('tenant organization')
+            return getByCode(query, context)
         }
     }
 
@@ -165,43 +282,55 @@ exports.get = async (query, context) => {
     }
 
     if (query.id) {
-        if (query.id === 'me') {
+        if (query.id === 'my') {
             return context.user
         }
-        return db.user.findById(query).populate('tenant organization')
+        return db.user.findById(query.id).populate(populate)
     }
 
     if (query.code) {
-        where.code = query.code.toLowerCase()
-        return db.user.findOne(where).populate('tenant organization')
+        if (query.code === 'my') {
+            return context.user
+        } else if (query.code === 'system' && context.tenant.owner) {
+            return db.user.findById(context.tenant.owner).populate(populate)
+        }
+
+        return getByCode(query.code, context)
     }
 
     if (query.role && query.role.id) {
-        return exports.getByRoleId(query.roleId || query.role.id, context)
+        return getByRoleId(query.role.id, context)
     }
 
     if (query.email) {
-        let email = query.email.toLowerCase()
-        return db.user.findOne({
-            email: email,
-            tenant: context.tenant
-        }).populate('tenant organization')
+        return getByEmail(query.email, context)
     }
 
     if (query.phone) {
-        let phone = query.phone
-        return db.user.findOne({
-            phone: phone,
-            tenant: context.tenant
-        }).populate('tenant organization')
+        return getByPhone(query.phone, context)
     }
 
     if (query.trackingId) {
-        where.trackingId = query.trackingId
-        return db.user.findOne(where).populate('tenant organization')
+        return db.user.findOne({
+            trackingId: query.trackingId,
+            tenant: context.tenant,
+            organization: context.organization
+        }).populate(populate)
     }
 
     return null
+}
+
+const getByKey = async (roleKey, context) => {
+    context.logger.start('services/users:getByKey')
+
+    let user = await db.user.findOne({
+        'role.key': roleKey
+    }).populate(populate)
+
+    if (user) { return user }
+
+    return getFromDirectory(roleKey, context)
 }
 
 exports.search = async (query, page, context) => {

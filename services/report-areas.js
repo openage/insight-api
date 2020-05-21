@@ -16,19 +16,27 @@ const set = async (model, entity, context) => {
 }
 
 exports.create = async (model, context) => {
-    var enitity = new db.reportArea({
+    var entity = new db.reportArea({
         code: model.code,
+        organization: context.tenant,
         tenant: context.tenant
     })
 
-    await set(enitity, model, context)
+    await set(entity, model, context)
 
-    return enitity.save()
+    return entity.save()
 }
 
 exports.search = async (query, page, context) => {
     let where = {
         tenant: context.tenant
+    }
+
+    if (context.organization) {
+        where['$or'] = [
+            { organization: { $exists: false } },
+            { organization: context.organization }
+        ]
     }
 
     const count = await db.reportArea.find(where).count()

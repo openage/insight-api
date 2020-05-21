@@ -309,3 +309,31 @@ exports.getCount = async (db, countQuery, context) => {
     context.logger.debug(`count = '${count}'`)
     return count // result.recordsets[0][0].count
 }
+
+exports.getProcedureData = async (db, dataQuery, context) => {
+    dataQuery = dataQuery.replace(/\\/g, '')
+    context.logger.silly('dataQuery', dataQuery)
+    let conn = await getConnetion(db, context)
+    let [rows, fields] = await conn.execute(dataQuery)
+    // await conn.end()
+    // conn.release()
+
+    let items = rows[0] || []
+    context.logger.debug(`got '${items.length}' records`)
+    return items
+}
+
+exports.getProcedureCount = async (db, countQuery, context) => {
+    countQuery = countQuery.replace(/\\/g, '')
+    context.logger.silly('countQuery', countQuery)
+
+    let conn = await getConnetion(db, context)
+    let [rows, fields] = await conn.execute(countQuery)
+    // await conn.end()
+    // conn.release()
+    let count = 0
+    if (rows.length && rows[0].length && rows[0][0].count)
+        count = rows[0][0].count
+    context.logger.debug(`count = '${count}'`)
+    return count // result.recordsets[0][0].count
+}

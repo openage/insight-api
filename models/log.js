@@ -4,14 +4,23 @@ var mongoose = require('mongoose')
 module.exports = {
     level: String,
     message: String,
-    meta: Object,
 
+    device: Object,
+    meta: Object,
+    error: Object,
     app: String,
     location: String,
-    report: String,
-    role: {
+
+    context: {
+        id: String,
+        ipAddress: String,
+        session: {
+            id: String
+        }
+    },
+    user: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'role'
+        ref: 'user'
     },
     organization: {
         type: mongoose.Schema.Types.ObjectId,
@@ -20,6 +29,5 @@ module.exports = {
     tenant: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'tenant'
-        //    required: true TODO: add tenant to prod
     }
 }

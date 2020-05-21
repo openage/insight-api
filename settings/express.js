@@ -1,10 +1,10 @@
 'use strict'
-var express = require('express')
-var path = require('path')
+const express = require('express')
+const path = require('path')
 const cors = require('cors')
 // const timeout = require('connect-timeout') // express v4
 
-var bodyParser = require('body-parser')
+let bodyParser = require('body-parser')
 var appRoot = require('app-root-path')
 
 module.exports.configure = function (app, logger) {
