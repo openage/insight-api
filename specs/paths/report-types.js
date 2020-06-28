@@ -8,4 +8,10 @@ module.exports = [{
     get: { permissions: ['tenant.guest', 'tenant.user'] },
     put: { permissions: ['tenant.admin', 'organization.admin'] },
     delete: { permissions: ['tenant.admin', 'organization.admin'] }
+}, {
+    url: '/:id/data',
+    get: {
+        permissions: ['tenant.guest', 'tenant.user'],
+        method: 'data'
+    }
 }]

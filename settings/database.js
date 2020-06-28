@@ -7,8 +7,14 @@ module.exports.configure = function (logger) {
     mongoose.Promise = global.Promise
 
     let connect = function () {
+        let config = JSON.parse(JSON.stringify(dbConfig))
+
+        if (config.options) {
+            config.options.promiseLibrary = global.Promise
+        }
+
         log.info('connecting to', dbConfig)
-        mongoose.connect(dbConfig.host)
+        mongoose.connect(config.host, config.options)
     }
 
     connect()

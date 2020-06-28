@@ -2,6 +2,13 @@
 const db = require('../models')
 
 const set = async (model, entity, context) => {
+    if (model.code && model.code !== entity.code) {
+        if (await this.get(model.code, context)) {
+            throw new Error('CODE_ALREADY_EXIST')
+        }
+        entity.code = model.code.trim().toLowerCase()
+    }
+
     if (model.name) {
         entity.name = model.name
     }
@@ -10,20 +17,36 @@ const set = async (model, entity, context) => {
         entity.icon = model.icon
     }
 
+    if (model.isHidden !== undefined) {
+        entity.isHidden = model.isHidden
+    }
+
+    if (model.description) {
+        entity.description = model.description
+    }
+
     if (model.permissions && model.permissions.length) {
         entity.permissions = model.permissions
     }
 }
 
 exports.create = async (model, context) => {
-    var entity = new db.reportArea({
-        code: model.code,
-        organization: context.tenant,
-        tenant: context.tenant
-    })
+    var entity = await this.get(model, context)
+    if (!entity) {
+        entity = new db.reportArea({
+            organization: context.organization,
+            tenant: context.tenant
+        })
+    }
 
-    await set(entity, model, context)
+    await set(model, entity, context)
 
+    return entity.save()
+}
+
+exports.update = async (id, model, context) => {
+    let entity = await this.get(id, context)
+    await set(model, entity, context)
     return entity.save()
 }
 

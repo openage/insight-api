@@ -1,81 +1,19 @@
 'use strict'
 
 const mongo = require('../helpers/mongodb')
-var moment = require('moment')
-var mongoose = require('mongoose')
 
-const matchClause = (report, context) => {
+var dataHelper = require('../helpers/report-data')
+
+const matchClause = (data, context) => {
     let log = context.logger.start('matchClause')
 
     var match = {}
 
-    report.type.params.forEach(param => {
-        let input = {}
-        input = report.params.find(i => i.key === param.key)
-        if (param.key === 'currentOrganization') {
-            input = {
-                // value: "59bd0f56415f0117c17d6df0"
-                value: context.organization.code
-            }
-        }
-        if (param.key === 'currentRoleCode') {
-            input = {
-                // value: "59bd0f56415f0117c17d6df0"
-                value: context.user.role.code
-            }
-        }
-        if (param.key === 'currentSupervisor') {
-            input = {
-                // value: "59bd0f56415f0117c17d6df0"
-                value: context.user.role.code
-            }
-        }
-        if (!input || !input.value) {
-            return
-        }
-
-        let value = param.valueKey ? input.value[param.valueKey] : input.value
+    data.params().forEach(param => {
+        let value = data.value(param)
 
         if (!value) {
             return
-        }
-
-        if (Array.isArray(value)) {
-            if (value.length > 1) {
-                // const obj = (value.map(obj => obj)).toString()
-                value = {
-                    '$in': value
-                }
-            } else {
-                let val = value[0].replace("'", '')
-                value = val.replace("'", '')
-            }
-        }
-
-        if (param.type === 'date') {
-            value = moment(new Date(value)).startOf('day').toDate()
-        }
-
-        if (param.type === 'string' && param.regex) {
-            value = {
-                "$regex": `^${value}`,
-                "$options": 'i'
-            }
-        }
-
-        if (param.type === 'month') {
-            value = {
-                $gt: moment(new Date(value)).startOf('month').toDate(),
-                $lt: moment(new Date(value)).endOf('month').toDate()
-            }
-        }
-
-        if (param.type === 'object') {
-            value = mongoose.Types.ObjectId(value)
-        }
-
-        if (param.type === 'integer') {
-            value = parseInt(value)
         }
 
         if (param.dbCondition === '<') {
@@ -86,34 +24,30 @@ const matchClause = (report, context) => {
             value = { '$gt': value }
         } else if (param.dbCondition === '>=') {
             value = { '$gte': value }
-        } else {
-            value = value
         }
 
         if (param.isOr) {
-            if (match["$or"]) {
+            if (match['$or']) {
                 if (match[param.dbKey]) {
-                    match["$or"].push({ [param.dbKey]: { ...match[param.dbKey], ...value } })
+                    match['$or'].push({ [param.dbKey]: { ...match[param.dbKey], ...value } })
                 } else {
-                    match["$or"].push({ [param.dbKey]: value })
+                    match['$or'].push({ [param.dbKey]: value })
                 }
             } else {
-                match["$or"] = []
+                match['$or'] = []
                 if (match[param.dbKey]) {
-                    match["$or"].push({ [param.dbKey]: { ...match[param.dbKey], ...value } })
+                    match['$or'].push({ [param.dbKey]: { ...match[param.dbKey], ...value } })
                 } else {
-                    match["$or"].push({ [param.dbKey]: value })
+                    match['$or'].push({ [param.dbKey]: value })
                 }
             }
         } else {
-
             if (match[param.dbKey]) {
                 match[param.dbKey] = { ...match[param.dbKey], ...value }
             } else {
                 match[param.dbKey] = value
             }
         }
-
     })
 
     log.debug(match)
@@ -121,15 +55,15 @@ const matchClause = (report, context) => {
     return match
 }
 
-const projectClause = (report, context) => {
+const projectClause = (reportType, context) => {
     let log = context.logger.start('projectClause')
 
     var project = { _id: 0 }
 
-    report.type.columns.forEach(column => {
+    reportType.type.columns.forEach(column => {
         project[column.key] = `${column.dbKey}`
         if (column.format) {
-            if (column.format == 'object') {
+            if (column.format === 'object') {
                 project[column.key] = JSON.parse(column.dbKey)
             }
         }
@@ -140,152 +74,79 @@ const projectClause = (report, context) => {
     return project
 }
 
-exports.count = async (report, context) => {
-    let log = context.logger.start('providers/mongodb:count')
+const whereBuilder = (match, aggregate) => {
+    let where = [...(aggregate.lookups || [])]
 
-    var match = matchClause(report, context)
-
-    let finder = [...JSON.parse(report.type.config.aggregate.lookups)]
-
-    finder.push({
+    where.push({
         '$match': match
     })
 
-    if (report.type.config.aggregate.group) {
-        finder.push({
-            '$group': JSON.parse(report.type.config.aggregate.group)
+    if (aggregate.group) {
+        where.push({
+            '$group': aggregate.group
         })
     }
 
-    finder.push({
-        '$count': 'total'
-    })
-
-    if (Object.entries(match).length === 0 && match.constructor === Object) {
-        if (report.type.config.aggregate.match) {
-            finder.forEach((item, i) => {
-                if (item['$match']) {
-                    finder[i]['$match'] = JSON.parse(report.type.config.aggregate.match)
-                }
-            })
-        }
-    } else {
-        if (report.type.config.aggregate.match) {
-            finder.forEach((item, i) => {
-                if (item['$match']) {
-                    finder[i]['$match'] = { ...finder[i]['$match'], ...JSON.parse(report.type.config.aggregate.match) }
-                }
-            })
-        }
-    }
-
-
-    let rows = await mongo.aggregateArray(report.type.provider.config.db.host, report.type.provider.config.db.database, `${report.type.config.aggregate.collection}`, finder)
-
-    if (rows.length > 0) {
-        log.debug('counted:' + rows[0].total)
-    } else {
-        log.debug('counted')
-    }
-
-    if (rows.length > 0) {
-        return rows[0].total
-    }
-    return 0
+    return where
 }
 
-exports.fetch = async (report, offset, limit, context) => {
-    let log = context.logger.start('providers/mongodb:fetch')
-
-    var match = matchClause(report, context)
-    var project = projectClause(report, context)
-
-    let finder = [...JSON.parse(report.type.config.aggregate.lookups)]
-
-    finder.push({
-        '$match': match
-    })
-
-    if (report.type.config.aggregate.group) {
-        finder.push({
-            '$group': JSON.parse(report.type.config.aggregate.group)
-        })
-    }
-
-    finder.push({
-        '$project': project
-    })
-
-    if (report.type.config.aggregate.sort) {
-        finder.push({
-            '$sort': JSON.parse(report.type.config.aggregate.sort)
-        })
-    }
-
-    if (Object.entries(match).length === 0 && match.constructor === Object) {
-        if (report.type.config.aggregate.match) {
-            finder.forEach((item, i) => {
-                if (item['$match']) {
-                    finder[i]['$match'] = JSON.parse(report.type.config.aggregate.match)
-                }
-            })
-        }
-    } else {
-        if (report.type.config.aggregate.match) {
-            finder.forEach((item, i) => {
-                if (item['$match']) {
-                    finder[i]['$match'] = { ...finder[i]['$match'], ...JSON.parse(report.type.config.aggregate.match) }
-                }
-            })
-        }
-    }
-
-    if (limit) {
-        if (offset === 0 || offset > 0) {
-            finder.push({
-                '$limit': limit + offset
-            })
-            finder.push({
-                '$skip': offset
-            })
-        }
-    }
-
-    let rows = await mongo.aggregateArray(report.type.provider.config.db.host, report.type.provider.config.db.database, `${report.type.config.aggregate.collection}`, finder)
-
-    log.debug('fetched')
-
-    return rows
-
-    // let finder = [{
-    //     "$lookup":
-
-    //     {
-
-    //        "from": "employees",
-
-    //        "localField": "employee",
-
-    //        "foreignField": "_id",
-
-    //        "as": "employees"
-
-    //    }
-    // },{
-    //     "$match" : {
-    //         "status": "present",
-    //         "ofDate": new Date("2019-04-28 18:30:00.000Z"),
-    //         "employees.department": "nursing general duty",
-    //     }
-    // },]
-
-    // let rows = await mongo.aggregateArray(report.type.provider.config.db.host, report.type.provider.config.db.database, `${report.type.config.aggregate.collection}`, finder)
-
-    // // log.debug('fetched')
-
-    // return rows
+const cancel = (id) => {
+    // return sql.cancel(id)
 }
 
-exports.cancel = (id) => {
-    return sql.cancel(id)
+module.exports = (reportType, query, context) => {
+    const logger = context.logger.start(`type:${reportType.code}`)
+    const data = dataHelper(reportType, query, context)
+    const config = data.config()
+    const connection = data.connection()
+
+    const db = mongo.db(connection, context).collection(config.aggregate.collection)
+
+    let match = matchClause(data, context)
+
+    if (config.aggregate.match) {
+        if (Object.entries(match).length === 0 && match.constructor === Object) {
+            match = config.aggregate.match
+        } else {
+            match = { ...match, ...config.aggregate.match }
+        }
+    }
+
+    let queryId = 0
+
+    return {
+        count: async () => {
+            let log = logger.start('count')
+            let where = whereBuilder(match, config.aggregate)
+            let count = await db.count(where)
+            log.end()
+            return count
+        },
+        items: async (page) => {
+            let log = logger.start('items')
+            page = page || {}
+            page.sort = page.sort || config.sort || config.aggregate.sort
+
+            let where = whereBuilder(match, config.aggregate)
+
+            const project = projectClause(reportType, context)
+
+            if (project) {
+                where.push({
+                    '$project': project
+                })
+            }
+
+            let rows = await db.find(where, page)
+            let items = (rows || []).map(i => data.toModel(i))
+            log.end()
+            return items
+        },
+        stats: async () => {
+            return {}
+        },
+        cancel: () => {
+            return cancel(queryId)
+        }
+    }
 }

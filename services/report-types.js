@@ -1,34 +1,26 @@
 'use strict'
 
 const db = require('../models')
-const mapper = require('../mappers/reportColumns')
 const areaService = require('./report-areas')
-const providesService = require('./providers')
+const masterService = require('./report-masters')
 
-const datesHelper = require('../helpers/dates')
-
-const populate = 'area provider'
-
-const formatResult = (item, report, context) => {
-    report.type.columns.forEach(column => {
-        if (column.type === 'date') {
-            let value = item[column.key]
-            if (value) {
-                item[column.key] = datesHelper.date(value).toString(column.format)
-            }
-        }
-
-        if (column.type === 'time') {
-            let value = item[column.key]
-            if (value) {
-                item[column.key] = datesHelper.time(value).toString(column.format)
-            }
-        }
-    })
-    return item
-}
+const populate = [{
+    path: 'area'
+}, {
+    path: 'type',
+    populate: {
+        path: 'provider'
+    }
+}]
 
 const set = async (model, entity, context) => {
+    if (model.code && model.code !== entity.code) {
+        if (await this.get(model.code, context)) {
+            throw new Error('CODE_ALREADY_EXIST')
+        }
+        entity.code = model.code.trim().toLowerCase()
+    }
+
     if (model.name) {
         entity.name = model.name
     }
@@ -41,6 +33,10 @@ const set = async (model, entity, context) => {
         entity.icon = model.icon
     }
 
+    if (model.order) {
+        entity.order = model.order
+    }
+
     if (model.widget) {
         entity.widget = entity.widget || {}
 
@@ -48,8 +44,7 @@ const set = async (model, entity, context) => {
         entity.widget.style = model.widget.style
         entity.widget.code = model.widget.code
         entity.widget.title = model.widget.title
-        entity.widget.xAxisLabel = model.widget.xAxisLabel
-        entity.widget.yAxisLabel = model.widget.yAxisLabel
+        entity.widget.config = model.widget.config
     }
 
     if (model.container) {
@@ -57,16 +52,6 @@ const set = async (model, entity, context) => {
         entity.container.style = model.container.style
         entity.container.code = model.container.code
         entity.container.class = model.container.class
-    }
-
-    if (model.view) {
-        entity.view = model.view
-        entity.widget = entity.widget || {}
-        entity.widget.code = model.view
-    }
-
-    if (model.order) {
-        entity.order = model.order
     }
 
     if (model.permissions) {
@@ -77,59 +62,77 @@ const set = async (model, entity, context) => {
         entity.area = await areaService.get(model.area, context)
     }
 
-    if (model.provider) {
-        entity.provider = await providesService.get(model.provider, context)
+    if (model.type) {
+        entity.type = await masterService.get(model.type, context)
     }
 
     if (model.config) {
         entity.config = model.config
     }
 
-    if (model.columns && model.columns.length) {
-        entity.columns = model.columns.map(c => {
+    if (model.fields && model.fields.length) {
+        entity.fields = model.fields.map(i => {
             return {
-                label: c.label,
-                key: c.key,
-                dbKey: c.dbKey,
-                type: c.type,
-                format: c.format,
-                ascending: c.ascending || true,
-                style: c.style,
-                icon: c.icon,
-                isEmit: c.isEmit
+                label: i.label,
+                icon: i.icon,
+                description: i.description,
+                key: i.key,
+                formula: i.formula,
+                type: i.type,
+                format: i.format,
+                ascending: i.ascending || true,
+                style: i.style || {},
+                config: i.config || {}
             }
         })
     }
 
-    if (model.params && model.params.length) {
-        entity.params = model.params.map(c => {
+    if (model.filters && model.filters.length) {
+        entity.filters = (model.filters || []).map(i => {
             return {
-                label: c.label,
-                key: c.key,
-                control: c.control,
-                options: (c.options || []).map(o => {
-                    return {
-                        label: o.label,
-                        value: o.value
-                    }
-                }),
-                style: c.style,
-                required: c.required,
-                message: c.message,
-                autoFill: c.autoFill,
-
-                dbKey: c.dbKey,
-                dbCondition: c.dbCondition,
-                type: c.type,
-                format: c.format,
-                isOr: c.isOr,
-                regex: c.regex,
-
-                value: c.value,
-                valueKey: c.valueKey,
-                valueLabel: c.valueLabel
+                label: i.label,
+                key: i.key,
+                control: i.control,
+                config: i.config || {},
+                style: i.style || {},
+                type: i.type,
+                format: i.format,
+                value: i.value,
+                valueKey: i.valueKey,
+                valueLabel: i.valueLabel
             }
         })
+    }
+
+    if (model.download) {
+        entity.download = entity.download || {}
+
+        if (entity.download.excel) {
+            const excel = model.download.excel
+            entity.download.excel = {
+                sheet: excel.sheet,
+                headers: excel.headers || [],
+                config: excel.config
+            }
+        }
+
+        if (model.download.csv) {
+            const csv = model.download.csv
+            entity.download.csv = {
+                formatter: csv.formatter,
+                headers: csv.headers || [],
+                config: csv.config
+            }
+        }
+
+        if (model.download.pdf) {
+            const pdf = model.download.pdf
+            entity.download.pdf = {
+                formatter: pdf.formatter,
+                headers: pdf.headers || [],
+                config: pdf.config
+            }
+        }
     }
 
     if (model.status) {
@@ -142,19 +145,21 @@ const set = async (model, entity, context) => {
 const create = async (model, context) => {
     const log = context.logger.start('services/report-types:create')
 
-    var entity = new db.reportType({
-        code: model.code,
-        order: 1,
-        status: 'active',
-        // organization: context.organization,
-        tenant: context.tenant
-    })
+    let entity = await this.get(model, context)
+    if (!entity) {
+        entity = new db.reportType({
+            status: 'active',
+            tenant: context.tenant
+        })
+    }
 
-    let report = await entity.save()
+    await set(model, entity, context)
+
+    await entity.save()
 
     log.end()
 
-    return report
+    return entity
 }
 
 exports.create = create
@@ -165,7 +170,7 @@ exports.update = async (id, model, context) => {
     return entity.save()
 }
 
-const search = async (query, page, context) => {
+exports.search = async (query, page, context) => {
     const log = context.logger.start('services/report-types:search')
 
     let where = {
@@ -217,7 +222,6 @@ const search = async (query, page, context) => {
         items: items
     }
 }
-exports.search = search
 
 exports.get = async (query, context) => {
     const log = context.logger.start('services/report-types:get')
@@ -245,58 +249,35 @@ exports.get = async (query, context) => {
 
 exports.data = async (id, query, page, context) => {
     const log = context.logger.start('services/report-types:data')
-    const reportType = await exports.get(id, context)
-    const provider = require(`../providers/${reportType.provider.handler}`)
+    const reportType = await this.get(id, context)
+    const handler = require(`../providers/${reportType.type.provider.handler}`)
 
-    let tempReport = {
-        type: reportType,
-        params: []
-    }
-    if (context.organization) {
-        query.currentOrganizationCode = context.organization.code
-    }
-    if (context.organization) {
-        query.currentOrganizationId = context.organization.id
-    }
-    if (context.user) {
-        query.currentRoleCode = context.user.role.code
-        query.currentSupervisor = context.user.role.code
-    }
-    reportType.params.forEach(param => {
-        if (query[param.key]) {
-            let input = {
-                key: param.key,
-                value: {}
-            }
-
-            if (param.valueKey) {
-                input.value[param.valueKey] = query[param.key]
-            } else {
-                input.value = query[param.key]
-            }
-            tempReport.params.push(input)
+    const filters = []
+    // populate default value
+    reportType.filters.forEach(f => {
+        if (query[f.key]) {
+            filters.push({
+                key: f.key,
+                value: query[f.key]
+            })
+        } else if (f.value) {
+            filters.push({
+                key: f.key,
+                value: f.value
+            })
         }
     })
 
-    let count = await provider.count(tempReport, context)
-    page = page || {}
-    let data = await provider.fetch(tempReport, page.skip, page.limit, context)
+    const builder = handler(reportType, filters, context)
 
-    data = data.map(i => mapper.formatResult(i, tempReport, context))
+    let count = await builder.count()
+    let items = await builder.items(page)
+    let stats = await builder.stats()
 
-    let stats
-
-    if (provider.footer) {
-        stats = await provider.footer(tempReport, context)
-        stats = mapper.formatResult(stats, tempReport, context)
-    }
-
-    let pagedItems = {
-        items: data,
+    log.end()
+    return {
+        items: items,
         stats: stats,
         total: count
     }
-
-    log.end()
-    return pagedItems
 }

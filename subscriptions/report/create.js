@@ -6,6 +6,8 @@ const webConfig = require('config').get('webServer')
 const queryConfig = require('config').get('query')
 const fsConfig = require('config').get('folders')
 
+const dataFormatter = require('../../mappers/reportColumns').formatResult
+
 const moment = require('moment')
 
 const getReportHeaderRows = (report, context) => {
@@ -15,7 +17,7 @@ const getReportHeaderRows = (report, context) => {
 
     let header = reportType.header || {}
     if (header.title) {
-        let titleText = header.title.text || report.type.name
+        let titleText = header.title.text || reportType.name
 
         if (header.title.format === 'upper') {
             titleText = titleText.toUpperCase()
@@ -119,12 +121,14 @@ exports.subscribe = async (report, context) => {
 
     try {
         report.startedAt = new Date()
-        const provider = require(`../../providers/${report.type.provider.handler}`)
 
-        if (!provider) {
+        const type = report.type
+        const handler = require(`../../providers/${type.type.provider.handler}`)
+
+        if (!handler) {
             log.error('provider not found')
 
-            report.error = `either '${report.provider}' does not exist`
+            report.error = `either 'providers/${type.type.provider.handler}' does not exist`
             report.status = 'errored'
             report.completedAt = new Date()
             return report.save()
@@ -137,21 +141,21 @@ exports.subscribe = async (report, context) => {
 
         log.silly('started the request')
 
-        let count = await provider.count(report, context)
+        const provider = handler(type, report.params, context)
+
+        let count = await provider.count()
 
         log.silly(`${count} records found`)
-        let offset = 0
-        let limit = queryConfig.limit
-
         log.silly('fetching data')
-        let data = await provider.fetch(report, offset, limit, context)
+        let data = await provider.items({
+            offset: 0,
+            limit: queryConfig.limit
+        })
 
         let stats
         if (provider.footer) {
-            stats = await provider.footer(report, context)
+            stats = await provider.footer()
         }
-
-        let reportHeaderRows = getReportHeaderRows(report, context)
 
         // build report
 
@@ -166,16 +170,19 @@ exports.subscribe = async (report, context) => {
             format = 'excel'
         }
 
-        let reportBuilder = require(`../../helpers/${format}-builder`)(report, count + reportHeaderRows.length, context)
+        const reportBuilder = require(`../../helpers/${format}-builder`)
 
-        reportBuilder.setHeader(reportHeaderRows)
+        let reportFile = await reportBuilder.file(type, count, context)
+
+        reportFile.setHeader(report)
+
         for (const row of data) {
-            reportBuilder.setRow(formatResult(row, report, context))
+            reportFile.setRow(dataFormatter(row, type, context))
         }
         if (stats) {
-            reportBuilder.setRow(formatResult(stats, report, context))
+            reportFile.setRow(formatResult(stats, report, context))
         }
-        let result = await reportBuilder.build()
+        let result = await reportFile.build()
 
         log.silly('ready for download')
         report.completedAt = new Date()

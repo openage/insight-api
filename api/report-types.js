@@ -24,12 +24,12 @@ api.get = async (req) => {
 
 api.data = async (req) => {
     let page = pager.extract(req)
-    let pagedItems = await service.data(req.params.id, req.query, page, req.context)
+    let query = pager.query(req.query)
+    let pagedItems = await service.data(req.params.id, query, page, req.context)
 
     if (page) {
         pagedItems.skip = page.skip
         pagedItems.limit = page.limit
-        pagedItems.pageSize = page.limit
         pagedItems.pageNo = page.pageNo
     }
 

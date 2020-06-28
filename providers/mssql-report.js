@@ -1,123 +1,113 @@
 'use strict'
 
-const sql = require('../helpers/mssql')
-var moment = require('moment')
+const mssql = require('../helpers/mssql')
+var dataHelper = require('../helpers/report-data')
 
-const whereClause = (report, context) => {
+const whereClause = (data, config, context) => {
     let log = context.logger.start('whereClause')
 
-    var whereBuilder = sql.whereBuilder()
+    let clause
 
-    report.type.params.forEach(param => {
-        let input = report.params.find(i => i.key === param.key)
-        if (!input || !input.value) {
-            return
+    if (config.where) {
+        clause = config.where
+    } else if (config.procedure) {
+        data.params.forEach(param => {
+            let value = data.value(param)
+
+            if (value) {
+                clause = clause + '"' + value + '",'
+            } else {
+                clause = clause + null + ','
+            }
+        })
+
+        if (clause != '') {
+            clause = clause.substr(0, clause.length - 1)
         }
+    } else {
+        var whereBuilder = mssql.whereBuilder()
 
-        let value = param.valueKey ? input.value[param.valueKey] : input.value
+        data.params.forEach(param => {
+            let value = data.value(param)
 
-        if (!value) {
-            return
-        }
+            if (!value) {
+                return
+            }
 
-        if (param.type === 'date') {
-            value = moment(value).format('YYYY-MM-DD')
-        }
+            whereBuilder.add(param.dbKey, value, param.dbCondition)
+        })
 
-        whereBuilder.add(param.dbKey, value, param.dbCondition)
-    })
-
-    let clause = whereBuilder.build(report.type.config.sql.where)
+        clause = whereBuilder.build(config.where)
+    }
 
     log.debug(clause)
 
     return clause
 }
 
-exports.count = (report, context) => {
-    let log = context.logger.start('providers/mssql-report:count')
-    let countQuery = report.type.config.sql.count || 'count(*)'
-    let queryString = ''
-    if (report.type.config.sql.group) {
-        queryString = `
-            SELECT count(*) as count FROM ( 
-                SELECT ${countQuery} as count
-                FROM ${report.type.config.sql.from} 
-                ${whereClause(report, context)}
-                GROUP BY ${report.type.config.sql.group}
-            ) as count`
-    } else {
-        queryString = `
-            SELECT ${countQuery} as count
-            FROM ${report.type.config.sql.from} 
-            ${whereClause(report, context)}`
+module.exports = (reportType, query, context) => {
+    const logger = context.logger.start(`type:${reportType.code}`)
+    const data = dataHelper(reportType, query, context)
+    const config = data.config().sql
+    const connection = data.connection()
+
+    const db = mssql.db(connection, context)
+
+    const where = whereClause(data, config, context)
+
+    const clause = {
+        procedure: config.procedure,
+        select: config.select,
+        count: config.count,
+        from: config.from,
+        where: where,
+        group: config.group
     }
-    return sql.getCount(report.type.provider.config.db, queryString, context)
-}
 
-exports.fetch = async (report, offset, limit, context) => {
-    let log = context.logger.start('providers/mssql-report:fetch')
-    let groupBy = report.type.config.sql.group ? `GROUP BY ${report.type.config.sql.group}` : ''
+    let queryId = 0
 
-    let queryString = ` 
-      SELECT ${report.type.config.sql.select}
-      FROM ${report.type.config.sql.from} 
-      ${whereClause(report, context)}
-      ${groupBy}`
+    return {
+        count: async () => {
+            let log = logger.start('count')
+            let count = await db.count(clause)
+            log.end()
+            return count
+        },
+        items: async (page) => {
+            let log = logger.start('items')
+            page = page || {}
+            page.sort = page.sort || config.sort
 
-    if (report.type.config.sql.sort) {
-        if (offset >= 0 && limit) {
-            queryString = ` 
-              SELECT TOP ${limit} * FROM(
-              SELECT ${report.type.config.sql.select}, ROW_NUMBER() OVER(ORDER BY ${report.type.config.sql.sort}) AS __i
-              FROM ${report.type.config.sql.from} 
-              ${whereClause(report, context)}
-              ${groupBy}
-              ) __temp WHERE __i >= ${offset}; `
-        } else {
-            queryString = ` 
-              SELECT ${report.type.config.sql.select}, ROW_NUMBER() OVER(ORDER BY ${report.type.config.sql.sort}) AS __i
-              FROM ${report.type.config.sql.from} 
-              ${whereClause(report, context)}
-              ${groupBy}`
+            let rows = await db.find(clause, page)
+            let items = (rows || []).map(i => data.toModel(i))
+            log.end()
+            return items
+        },
+        stats: async () => {
+            let log = logger.start('stats')
+
+            if (!config.summary) {
+                return
+            }
+            let clause
+
+            if (typeof config.summary === 'string') {
+                clause = { sql: config.summary.inject(where) }
+            } else {
+                clause = {
+                    select: config.summary.select,
+                    from: config.summary.from,
+                    where: where,
+                    group: config.summary.group
+                }
+            }
+            let rows = await db.find(clause)
+            let items = (rows || []).map(i => data.toModel(i))
+            log.end()
+            return items
+        },
+        cancel: () => {
+            return mssql.cancel(queryId)
         }
-    } else if (offset >= 0 && limit) {
-        queryString = ` 
-          SELECT TOP ${limit} * FROM(
-          SELECT ${report.type.config.sql.select}
-          FROM ${report.type.config.sql.from} 
-          ${whereClause(report, context)}
-          ${groupBy}
-          ) __temp WHERE __i >= ${offset}; `
     }
-
-    let items = await sql.getData(report.type.provider.config.db, queryString, context)
-
-    log.end('fetched')
-    return items
-}
-
-exports.footer = async (report, context) => {
-    let log = context.logger.start('providers/mssql-report:footer')
-
-    if (!report.type.config.sql.summary || !report.type.config.sql.summary.select || !report.type.config.sql.summary.from) {
-        return
-    }
-
-    let where = whereClause(report, context)
-
-    let queryString = `${report.type.config.sql.summary.select} ${report.type.config.sql.summary.from} ${where} ${report.type.config.sql.summary.group ? report.type.config.sql.summary.group : ''}`
-
-    let items = await sql.getData(report.type.provider.config.db, queryString, context)
-
-    log.end()
-
-    if (!items || !items.length) {
-        return
-    }
-
-    return items[0]
-}
-exports.cancel = (id) => {
-    return sql.cancel(id)
 }

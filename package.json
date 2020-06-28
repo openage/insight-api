@@ -1,6 +1,6 @@
 {
   "name": "insight-api",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Reports and Analytics Backend",
   "repository": {
     "type": "git",
@@ -18,7 +18,7 @@
     "test": "mocha tests --recursive --no-timeouts --watch",
     "lint": "eslint ../ --fix"
   },
-  "dependencies": { 
+  "dependencies": {
     "@open-age/directory-client": "^2.2.2",
     "@open-age/express-api": "^2.2.0",
     "@open-age/gateway-client": "^1.0.3",

@@ -1,5 +1,7 @@
 'use strict'
-var mongoose = require('mongoose')
+
+const mongoose = require('mongoose')
+
 module.exports = {
     code: { type: String, lowercase: true },
     name: String,

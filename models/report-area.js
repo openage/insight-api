@@ -3,6 +3,8 @@ module.exports = {
     code: String,
     name: String,
     icon: String,
+    description: String,
+    isHidden: Boolean,
     permissions: [String],
     organization: { // optional
         type: mongoose.Schema.Types.ObjectId,

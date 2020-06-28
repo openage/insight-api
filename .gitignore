@@ -9,4 +9,5 @@
 !/temp/*.txt
 /config/*
 !/config/default.json
+/templates/*
 

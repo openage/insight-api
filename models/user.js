@@ -1,4 +1,5 @@
-var mongoose = require('mongoose')
+const mongoose = require('mongoose')
+
 module.exports = {
     role: {
         id: String,

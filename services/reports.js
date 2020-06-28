@@ -5,9 +5,12 @@ const reportTypes = require('./report-types')
 const mapper = require('../mappers/reportColumns')
 
 const populate = {
-    path: 'type',
+    path: 'type user',
     populate: {
-        path: 'provider area user'
+        path: 'type',
+        populate: {
+            path: 'provider'
+        }
     }
 }
 
@@ -58,18 +61,23 @@ exports.update = async (id, model, context) => {
 exports.data = async (id, page, context) => {
     const log = context.logger.start('services/reports:data')
     const report = await exports.get(id, context)
-    const provider = require(`../providers/${report.type.provider.handler}`)
-    let count = await provider.count(report, context)
+
+    const type = report.type
+    const provider = require(`../providers/${type.type.provider.handler}`)(type, report.params, context)
+    let count = await provider.count()
     page = page || {}
-    let data = await provider.fetch(report, page.skip, page.limit, context)
+    let data = []
 
-    data = data.map(i => mapper.formatResult(i, report, context))
+    if (count > 0) {
+        data = await provider.items(page)
+        data = data.map(i => mapper.formatResult(i, type, context))
+    }
 
-    let stats
+    let stats = {}
 
     if (provider.footer) {
         stats = await provider.footer(report, context)
-        stats = mapper.formatResult(stats, report, context)
+        stats = mapper.formatResult(stats, type, context)
     }
 
     let pagedItems = {

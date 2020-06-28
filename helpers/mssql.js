@@ -218,7 +218,7 @@ exports.whereBuilder = function () {
 
 const connections = {}
 
-const getConnetion = async (db, context) => {
+const getConnection = async (db, context) => {
     let poolKey = `${db.username}@${db.host}/${db.database}`
     context.logger.debug('getting connection', poolKey)
 
@@ -256,8 +256,20 @@ const getConnetion = async (db, context) => {
  */
 exports.getData = async (db, dataQuery, context) => {
     context.logger.silly('dataQuery', dataQuery)
-    let conn = await getConnetion(db, context)
+    let conn = await getConnection(db, context)
     let result = await conn.query(dataQuery)
+    // conn.release()
+
+    let items = result.recordsets[0] || []
+    context.logger.debug(`got '${items.length}' records`)
+    return items
+}
+
+exports.getProcedureData = async (db, dataQuery, context) => {
+    dataQuery = dataQuery.replace(/\\/g, '')
+    context.logger.silly('dataQuery', dataQuery)
+    let conn = await getConnection(db, context)
+    let result = await conn.execute(dataQuery)
     // conn.release()
 
     let items = result.recordsets[0] || []
@@ -268,8 +280,108 @@ exports.getData = async (db, dataQuery, context) => {
 exports.getCount = async (db, countQuery, context) => {
     context.logger.silly('countQuery', countQuery)
 
-    let conn = await getConnetion(db, context)
+    let conn = await getConnection(db, context)
     let result = await conn.query(countQuery)
     // conn.release()
     return result.recordsets[0][0].count
+}
+
+exports.getProcedureCount = async (db, countQuery, context) => {
+    countQuery = countQuery.replace(/\\/g, '')
+    context.logger.silly('countQuery', countQuery)
+
+    let conn = await getConnection(db, context)
+    let result = await conn.execute(countQuery)
+    // conn.release()
+    return result.recordsets[0][0].count
+}
+
+exports.db = (connection, context) => {
+    if (typeof connection === 'string') {
+        connection = require('config').get(`providers.${connection}`).dbServer
+    }
+    return {
+        count: async (clause) => {
+            let queryString = ''
+
+            if (clause.procedure) {
+                queryString = `CALL ${clause.procedure.count}(${clause.where})`
+                return this.getProcedureCount(connection, queryString, context)
+            }
+
+            if (clause.group) {
+                queryString = `
+                    SELECT count(*) as count FROM ( 
+                        SELECT ${clause.count} as count
+                        FROM ${clause.from} 
+                        ${clause.where}
+                        GROUP BY ${clause.group}
+                    ) as count`
+            } else {
+                queryString = `
+                    SELECT ${clause.count || 'count(*)'} as count
+                    FROM ${sql.from} 
+                    ${clause.where}`
+            }
+
+            return this.getCount(connection, queryString, context)
+        },
+        find: async (clause, page) => {
+            page = page || {}
+
+            if (clause.sql) {
+                return this.getData(connection, clause.sql, context)
+            }
+
+            let queryString
+            if (clause.procedure) {
+                if (page.limit) {
+                    if (clause.where) {
+                        queryString = `call ${clause.procedure.fetch}(${page.limit},${page.offset || 0},${clause.where})`
+                    } else {
+                        queryString = `call ${clause.procedure.fetch}(${page.limit},${page.offset || 0})`
+                    }
+                } else {
+                    queryString = `call ${clause.procedure.fetchAll}(${clause.where})`
+                }
+
+                return this.getProcedureData(connection, queryString, context)
+            }
+
+            let groupBy = clause.group ? `GROUP BY ${clause.group}` : ''
+
+            queryString = ` 
+              SELECT ${clause.select}
+              FROM ${clause.from} 
+              ${clause.where}
+              ${groupBy}`
+            if (page.sort) {
+                if (page.offset >= 0 && page.limit) {
+                    queryString = ` 
+                      SELECT TOP ${page.limit} * FROM(
+                      SELECT ${clause.select}, ROW_NUMBER() OVER(ORDER BY ${page.sort}) AS __i
+                      FROM ${clause.from} 
+                      ${clause.where}
+                      ${groupBy}
+                      ) __temp WHERE __i >= ${page.offset}; `
+                } else {
+                    queryString = ` 
+                      SELECT ${clause.select}, ROW_NUMBER() OVER(ORDER BY ${page.sort}) AS __i
+                      FROM ${clause.from} 
+                      ${clause.where}
+                      ${groupBy}`
+                }
+            } else if (page.offset >= 0 && page.limit) {
+                queryString = ` 
+                  SELECT TOP ${page.limit} * FROM(
+                  SELECT ${clause.select}
+                  FROM ${clause.from} 
+                  ${clause.where}
+                  ${groupBy}
+                  ) __temp WHERE __i >= ${page.offset}; `
+            }
+
+            return this.getData(connection, queryString, context)
+        }
+    }
 }

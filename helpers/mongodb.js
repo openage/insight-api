@@ -1,40 +1,62 @@
 'use strict'
 var mongo = require('mongodb')
 
-const getConnection = (host) => {
+const getClient = (host) => {
     return new Promise((resolve, reject) => {
-        mongo.MongoClient.connect(host, function (err, connection) {
+        mongo.MongoClient.connect(host, function (err, client) {
             if (err) { return reject(err) }
-            resolve(connection)
+            resolve(client)
         })
     })
 }
 
-const aggregateArray = (host, database, collection, finder) => {
-    return getConnection(host).then(connection => {
-        return new Promise((resolve, reject) => {
-            return connection.db(database).collection(collection).aggregate(finder, { allowDiskUse: true, collation: { 'locale': 'en', numericOrdering: true } }).toArray((err, rows) => {
-                connection.close()
-                if (err) {
-                    return reject(err)
-                }
-                return resolve(rows)
-            })
-        })
-    })
+exports.aggregateArray = async (connection, collection, finder, context) => {
+    let client = await getClient(connection.host)
+    context.logger.debug(JSON.stringify(finder))
+    let rows = await client.db(connection.database).collection(collection).aggregate(finder, { allowDiskUse: true, collation: { 'locale': 'en', numericOrdering: true } }).toArray()
+    client.close()
+    return rows
 }
-exports.aggregateArray = aggregateArray
 
-// var db = require()
-// db('directory).collection('employees').aggregate([]).then(list=> {
-// })
-exports.db = (provider) => {
-    var dbConfig = require('config').get(`providers.${provider}`).dbServer
+exports.db = (connection, context) => {
+    if (typeof connection === 'string') {
+        connection = require('config').get(`providers.${connection}`).dbServer
+    }
     return {
         collection: (name) => {
             return {
-                aggregate: (finder) => {
-                    return aggregateArray(dbConfig.host, dbConfig.database, name, finder)
+                find: (finder, page) => {
+                    page = page || {}
+
+                    if (page.limit) {
+                        if (page.offset === 0 || page.offset > 0) {
+                            finder.push({
+                                '$limit': page.limit + page.offset
+                            })
+                            finder.push({
+                                '$skip': page.offset
+                            })
+                        }
+                    }
+
+                    if (page.sort) {
+                        finder.push({
+                            '$sort': page.sort
+                        })
+                    }
+                    return this.aggregateArray(connection, name, finder, context)
+                },
+                count: async (finder) => {
+                    finder.push({
+                        '$count': 'total'
+                    })
+
+                    let rows = await this.aggregateArray(connection, name, finder, context)
+
+                    if (rows.length > 0) {
+                        return rows[0].total
+                    }
+                    return 0
                 }
             }
         }

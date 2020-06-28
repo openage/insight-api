@@ -1,5 +1,4 @@
 'use strict'
-const moment = require('moment')
 
 exports.toModel = (entity, context) => {
     let model = {
@@ -7,7 +6,8 @@ exports.toModel = (entity, context) => {
         code: entity.code,
         name: entity.name,
         icon: entity.icon,
-        view: entity.view,
+        description: entity.description,
+        isHidden: entity.isHidden,
         permissions: [],
         timeStamp: entity.timeStamp
     }
@@ -19,10 +19,4 @@ exports.toModel = (entity, context) => {
     }
 
     return model
-}
-
-exports.toSearchModel = (entities, context) => {
-    return entities.map(entity => {
-        return exports.toModel(entity, context)
-    })
 }

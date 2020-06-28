@@ -1,5 +1,6 @@
 'use strict'
 var sql = require('mysql2/promise')
+const { query } = require('./paging')
 
 exports.updateFields = function (data) {
     var changedFields = []
@@ -332,8 +333,75 @@ exports.getProcedureCount = async (db, countQuery, context) => {
     // await conn.end()
     // conn.release()
     let count = 0
-    if (rows.length && rows[0].length && rows[0][0].count)
-        count = rows[0][0].count
+    if (rows.length && rows[0].length && rows[0][0].count) { count = rows[0][0].count }
     context.logger.debug(`count = '${count}'`)
     return count // result.recordsets[0][0].count
+}
+
+exports.db = (connection, context) => {
+    if (typeof connection === 'string') {
+        connection = require('config').get(`providers.${connection}`).dbServer
+    }
+    return {
+        count: async (clause) => {
+            let queryString = ''
+
+            if (clause.procedure) {
+                queryString = `CALL ${clause.procedure.count}(${clause.where})`
+                return this.getProcedureCount(connection, queryString, context)
+            }
+            if (clause.group) {
+                queryString = `
+                    SELECT count(*) as count FROM ( 
+                        SELECT ${clause.count}
+                        FROM ${clause.from} 
+                        ${clause.where}
+                        GROUP BY ${clause.group}
+                    ) as count`
+            } else {
+                queryString = `
+                    SELECT ${clause.count || 'count(*)'} as count
+                    FROM ${sql.from} 
+                    ${clause.where}`
+            }
+
+            return this.getCount(connection, queryString, context)
+        },
+        find: async (clause, page) => {
+            page = page || {}
+
+            let queryString
+
+            if (clause.sql) {
+                return this.getData(connection, clause.sql, context)
+            }
+
+            if (clause.procedure) {
+                if (page.limit) {
+                    if (clause.where) {
+                        queryString = `call ${clause.procedure.fetch}(${page.limit},${page.offset || 0},${clause.where})`
+                    } else {
+                        queryString = `call ${clause.procedure.fetch}(${page.limit},${page.offset || 0})`
+                    }
+                } else {
+                    queryString = `call ${clause.procedure.fetchAll}(${clause.where})`
+                }
+
+                return this.getProcedureData(connection, queryString, context)
+            }
+
+            let groupBy = clause.group ? `GROUP BY ${clause.group}` : ''
+            let orderBy = page.sort ? `ORDER BY ${page.sort}` : ''
+            let limit = page.limit ? `LIMIT ${page.limit} OFFSET ${page.offset || 0}` : ''
+
+            queryString = ` 
+            SELECT ${clause.select}
+            FROM ${clause.from} 
+            ${clause.where}
+            ${groupBy}
+            ${orderBy}
+            ${limit}; `
+            return this.getData(connection, queryString, context)
+        }
+    }
 }

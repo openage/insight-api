@@ -85,6 +85,7 @@ module.exports = (serviceName, mapperName) => {
             if (!entityService.update) {
                 throw new Error(`METHOD_NOT_SUPPORTED`)
             }
+            req.context.logger.silly(JSON.stringify(req.body))
             const entity = await entityService.update(req.params.id, req.body, req.context)
             return entityMapper.toModel(entity, req.context)
         },
@@ -93,6 +94,8 @@ module.exports = (serviceName, mapperName) => {
             if (!entityService.create) {
                 throw new Error(`METHOD_NOT_SUPPORTED`)
             }
+
+            req.context.logger.silly(JSON.stringify(req.body))
             const entity = await entityService.create(req.body, req.context)
             return entityMapper.toModel(entity, req.context)
         },
